@@ -1,4 +1,5 @@
 const XLSX = require("xlsx");
+const PDFDocument = require("pdfkit");
 const Product = require("../models/Product");
 const { uploadImageBuffer, deleteByPublicId } = require("../services/cloudinary");
 const { logAction } = require("../services/audit");
@@ -14,6 +15,71 @@ function parseNumber(value, fieldName) {
   const num = Number(value);
   if (!Number.isFinite(num)) throw new Error(`Campo '${fieldName}' debe ser numérico.`);
   return num;
+}
+
+function buildProductFilter(query) {
+  const filter = {};
+  const q = query || {};
+
+  const like = (value) => ({ $regex: String(value).trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), $options: "i" });
+
+  if (q.codigo) filter.sku = like(q.codigo);
+  if (q.descripcion) {
+    filter.$or = [{ nombre: like(q.descripcion) }, { descripcion: like(q.descripcion) }];
+  }
+  if (q.categoria) filter.categoria = String(q.categoria).trim();
+  if (q.subCategoria) filter.subCategoria = String(q.subCategoria).trim();
+  if (q.referencia) filter.referencia = like(q.referencia);
+  if (q.codigoBarras) filter.codigoBarras = like(q.codigoBarras);
+  if (q.proveedor) filter.proveedor = like(q.proveedor);
+
+  return filter;
+}
+
+function parseCsv(buffer) {
+  const text = buffer.toString("utf8").replace(/^\uFEFF/, "");
+  const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
+  if (!lines.length) return [];
+
+  const sample = lines[0];
+  const comma = (sample.match(/,/g) || []).length;
+  const semi = (sample.match(/;/g) || []).length;
+  const delimiter = semi > comma ? ";" : ",";
+
+  function splitLine(line) {
+    const out = [];
+    let cur = "";
+    let inQuotes = false;
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      if (ch === '"') {
+        const next = line[i + 1];
+        if (inQuotes && next === '"') {
+          cur += '"';
+          i++;
+        } else {
+          inQuotes = !inQuotes;
+        }
+      } else if (ch === delimiter && !inQuotes) {
+        out.push(cur);
+        cur = "";
+      } else {
+        cur += ch;
+      }
+    }
+    out.push(cur);
+    return out.map((s) => s.trim());
+  }
+
+  const headers = splitLine(lines[0]).map((h) => normalizeHeader(h));
+  const rows = [];
+  for (let i = 1; i < lines.length; i++) {
+    const cols = splitLine(lines[i]);
+    const obj = {};
+    for (let j = 0; j < headers.length; j++) obj[headers[j]] = cols[j] ?? "";
+    rows.push(obj);
+  }
+  return rows;
 }
 
 /**
@@ -32,14 +98,21 @@ async function bulkUploadProducts(req, res) {
       return res.status(400).json({ message: "Archivo requerido (field: file)." });
     }
 
-    const workbook = XLSX.read(req.file.buffer, { type: "buffer" });
-    const firstSheetName = workbook.SheetNames[0];
-    if (!firstSheetName) {
-      return res.status(400).json({ message: "El Excel no tiene hojas." });
-    }
+    const isCsv =
+      String(req.file.originalname || "").toLowerCase().endsWith(".csv") ||
+      String(req.file.mimetype || "").includes("csv") ||
+      String(req.file.mimetype || "").includes("text/plain");
 
-    const sheet = workbook.Sheets[firstSheetName];
-    const rows = XLSX.utils.sheet_to_json(sheet, { defval: "" });
+    const rows = isCsv
+      ? parseCsv(req.file.buffer)
+      : (() => {
+          const workbook = XLSX.read(req.file.buffer, { type: "buffer" });
+          const firstSheetName = workbook.SheetNames[0];
+          if (!firstSheetName) throw new Error("El Excel no tiene hojas.");
+          const sheet = workbook.Sheets[firstSheetName];
+          return XLSX.utils.sheet_to_json(sheet, { defval: "" });
+        })();
+
     if (!rows.length) {
       return res.status(400).json({ message: "El Excel está vacío." });
     }
@@ -54,7 +127,14 @@ async function bulkUploadProducts(req, res) {
       { key: "unidadMedida", aliases: ["unidadmedida", "unidad", "unidad_medida", "unit"] }
     ];
 
-    const optional = [{ key: "proveedor", aliases: ["proveedor", "supplier", "vendor"] }];
+    const optional = [
+      { key: "proveedor", aliases: ["proveedor", "supplier", "vendor"] },
+      { key: "descripcion", aliases: ["descripcion", "description"] },
+      { key: "categoria", aliases: ["categoria", "category"] },
+      { key: "subCategoria", aliases: ["subcategoria", "subcategoria", "subcategory", "sub_category"] },
+      { key: "referencia", aliases: ["referencia", "ref"] },
+      { key: "codigoBarras", aliases: ["codigobarras", "codigo_barras", "barcode", "ean"] }
+    ];
 
     const productsToInsert = [];
     const seenSkus = new Set();
@@ -96,7 +176,26 @@ async function bulkUploadProducts(req, res) {
       }
 
       const proveedor = extracted.proveedor ? String(extracted.proveedor).trim() : "";
-      productsToInsert.push({ sku, nombre, precio, stock, iva, unidadMedida, proveedor });
+      const descripcion = extracted.descripcion ? String(extracted.descripcion).trim() : "";
+      const categoria = extracted.categoria ? String(extracted.categoria).trim() : "";
+      const subCategoria = extracted.subCategoria ? String(extracted.subCategoria).trim() : "";
+      const referencia = extracted.referencia ? String(extracted.referencia).trim() : "";
+      const codigoBarras = extracted.codigoBarras ? String(extracted.codigoBarras).trim() : "";
+
+      productsToInsert.push({
+        sku,
+        nombre,
+        descripcion,
+        categoria,
+        subCategoria,
+        referencia,
+        codigoBarras,
+        precio,
+        stock,
+        iva,
+        unidadMedida,
+        proveedor
+      });
     }
 
     const skus = productsToInsert.map((p) => p.sku);
@@ -120,15 +219,67 @@ async function bulkUploadProducts(req, res) {
  * GET /api/products
  * Catálogo simple (público).
  */
-async function listProducts(_req, res) {
+async function listProducts(req, res) {
   try {
-    const items = await Product.find({})
+    const filter = buildProductFilter(req.query);
+    const items = await Product.find(filter)
       .sort({ createdAt: -1 })
-      .select("sku nombre precio stock iva unidadMedida imageUrl proveedor")
+      .select("sku nombre descripcion categoria subCategoria referencia codigoBarras precio stock iva unidadMedida imageUrl proveedor")
       .lean();
     return res.json({ items });
   } catch (err) {
     return res.status(500).json({ message: "No se pudo cargar el catálogo.", error: err.message });
+  }
+}
+
+/**
+ * GET /api/products/meta
+ * Devuelve listas para combos (categoría/subcategoría y códigos barras).
+ */
+async function productsMeta(_req, res) {
+  try {
+    const categories = (await Product.distinct("categoria")).filter(Boolean).sort();
+    const subCategories = (await Product.distinct("subCategoria")).filter(Boolean).sort();
+    const barcodes = (await Product.distinct("codigoBarras")).filter(Boolean).sort();
+    return res.json({ categories, subCategories, barcodes });
+  } catch (err) {
+    return res.status(500).json({ message: "No se pudo cargar meta.", error: err.message });
+  }
+}
+
+/**
+ * POST /api/products
+ * Admin: crea un producto (manual).
+ */
+async function createProduct(req, res) {
+  try {
+    const body = req.body || {};
+    const sku = String(body.sku || body.codigo || "").trim();
+    const nombre = String(body.nombre || "").trim();
+    if (!sku || !nombre) return res.status(400).json({ message: "sku/codigo y nombre son requeridos." });
+
+    const exists = await Product.findOne({ sku }).lean();
+    if (exists) return res.status(409).json({ message: "Ya existe un producto con ese código (sku)." });
+
+    const product = await Product.create({
+      sku,
+      nombre,
+      descripcion: body.descripcion ? String(body.descripcion).trim() : "",
+      categoria: body.categoria ? String(body.categoria).trim() : "",
+      subCategoria: body.subCategoria ? String(body.subCategoria).trim() : "",
+      referencia: body.referencia ? String(body.referencia).trim() : "",
+      codigoBarras: body.codigoBarras ? String(body.codigoBarras).trim() : "",
+      precio: parseNumber(body.precio, "precio"),
+      stock: parseNumber(body.stock, "stock"),
+      iva: parseNumber(body.iva, "iva"),
+      unidadMedida: String(body.unidadMedida || "").trim(),
+      proveedor: body.proveedor ? String(body.proveedor).trim() : ""
+    });
+
+    await logAction(req, { action: "product.create", entity: "Product", entityId: product._id });
+    return res.status(201).json({ product });
+  } catch (err) {
+    return res.status(500).json({ message: "No se pudo crear producto.", error: err.message });
   }
 }
 
@@ -187,6 +338,70 @@ async function exportProductsXlsx(_req, res) {
 }
 
 /**
+ * GET /api/products/catalog.pdf
+ * Genera un PDF simple del catálogo (con filtros opcionales por query).
+ */
+async function catalogPdf(req, res) {
+  try {
+    const filter = buildProductFilter(req.query);
+    const items = await Product.find(filter)
+      .sort({ categoria: 1, subCategoria: 1, nombre: 1 })
+      .select("sku nombre descripcion categoria subCategoria referencia codigoBarras precio stock iva unidadMedida")
+      .lean();
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", 'attachment; filename="catalogo.pdf"');
+
+    const doc = new PDFDocument({ size: "A4", margin: 42 });
+    doc.pipe(res);
+
+    doc.fontSize(18).text("Catálogo de productos", { align: "center" });
+    doc.moveDown(0.5);
+    doc.fontSize(10).fillColor("#555").text(`Generado: ${new Date().toLocaleString()}`, { align: "center" });
+    doc.moveDown(1);
+    doc.fillColor("#000");
+
+    let y = doc.y;
+    const rowH = 16;
+
+    function header() {
+      doc.fontSize(10).fillColor("#111");
+      doc.text("Código", 42, y, { width: 70 });
+      doc.text("Descripción", 112, y, { width: 220 });
+      doc.text("Cat/Sub", 332, y, { width: 120 });
+      doc.text("Precio", 452, y, { width: 60, align: "right" });
+      doc.text("Stock", 512, y, { width: 40, align: "right" });
+      y += rowH;
+      doc.moveTo(42, y).lineTo(552, y).strokeColor("#ddd").stroke();
+      y += 6;
+      doc.strokeColor("#000");
+    }
+
+    header();
+
+    doc.fontSize(9).fillColor("#222");
+    for (const p of items) {
+      if (y > 760) {
+        doc.addPage();
+        y = 42;
+        header();
+      }
+      const cat = [p.categoria, p.subCategoria].filter(Boolean).join(" / ");
+      doc.text(String(p.sku || ""), 42, y, { width: 70 });
+      doc.text(String(p.descripcion || p.nombre || ""), 112, y, { width: 220 });
+      doc.text(cat, 332, y, { width: 120 });
+      doc.text(String(p.precio ?? ""), 452, y, { width: 60, align: "right" });
+      doc.text(String(p.stock ?? ""), 512, y, { width: 40, align: "right" });
+      y += rowH;
+    }
+
+    doc.end();
+  } catch (err) {
+    return res.status(500).json({ message: "No se pudo generar PDF.", error: err.message });
+  }
+}
+
+/**
  * POST /api/products/:id/image
  * Sube una imagen (multipart/form-data, field: "image") a Cloudinary y la asocia al producto.
  */
@@ -233,4 +448,13 @@ async function uploadProductImage(req, res) {
   }
 }
 
-module.exports = { bulkUploadProducts, listProducts, lowStock, exportProductsXlsx, uploadProductImage };
+module.exports = {
+  bulkUploadProducts,
+  listProducts,
+  productsMeta,
+  createProduct,
+  lowStock,
+  exportProductsXlsx,
+  catalogPdf,
+  uploadProductImage
+};

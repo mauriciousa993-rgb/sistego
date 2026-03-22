@@ -3,7 +3,16 @@ const mongoose = require("mongoose");
 const productSchema = new mongoose.Schema(
   {
     sku: { type: String, required: true, unique: true, index: true, trim: true },
-    nombre: { type: String, required: true, trim: true },
+    // Código / descripción
+    nombre: { type: String, required: true, trim: true }, // nombre corto
+    descripcion: { type: String, trim: true, default: "" },
+
+    // Clasificación (para filtros/catálogos)
+    categoria: { type: String, trim: true, index: true, default: "" },
+    subCategoria: { type: String, trim: true, index: true, default: "" },
+    referencia: { type: String, trim: true, index: true, default: "" },
+    codigoBarras: { type: String, trim: true, index: true, default: "" },
+
     precio: { type: Number, required: true, min: 0 },
     stock: { type: Number, required: true, min: 0 },
     // IVA en porcentaje (por ejemplo: 19 para 19%)

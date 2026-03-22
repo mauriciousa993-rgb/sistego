@@ -57,8 +57,8 @@ export default function App() {
 
   const nav = useMemo(() => {
     if (!role) return [];
-    if (role === "Cliente") return ["home", "shop", "cart", "orders", "invoices"];
-    if (role === "Vendedor") return ["home", "orders", "customers", "invoices"];
+    if (role === "Cliente") return ["home", "search", "catalog", "shop", "cart", "orders", "invoices"];
+    if (role === "Vendedor") return ["home", "search", "catalog", "orders", "customers", "invoices"];
     if (role === "Bodega") return ["home", "orders"];
     return ["home", "reports", "inventory", "purchases", "audit", "invoices", "users"];
   }, [role]);
@@ -196,6 +196,8 @@ export default function App() {
               {key === "invoices" ? "Facturas" : null}
               {key === "shop" ? "Productos" : null}
               {key === "cart" ? "Carrito" : null}
+              {key === "search" ? "Buscar Artículos" : null}
+              {key === "catalog" ? "Catálogo" : null}
               {key === "inventory" ? "Inventario" : null}
               {key === "reports" ? "Reportes" : null}
               {key === "purchases" ? "Compras" : null}
@@ -216,8 +218,10 @@ export default function App() {
         </div>
         </aside>
 
-        <main className="main">
+      <main className="main">
         {active === "home" ? <HomePanel role={role} go={setActive} /> : null}
+        {active === "search" ? <SearchArticlesPanel /> : null}
+        {active === "catalog" ? <CatalogPanel /> : null}
         {active === "orders" && role !== "Cliente" ? <OrdersPanel role={role} userId={auth.user?.id} /> : null}
         {active === "orders" && role === "Cliente" ? <CustomerOrdersPanel /> : null}
         {active === "shop" && role === "Cliente" ? <ShopPanel /> : null}
@@ -335,10 +339,19 @@ function HomePanel({ role, go }) {
 
 function OrdersPanel({ role, userId }) {
   const [products, setProducts] = useState({ loading: false, items: [], error: "" });
+  const [meta, setMeta] = useState({ loading: false, categories: [], subCategories: [], barcodes: [], error: "" });
   const [orders, setOrders] = useState({ loading: false, items: [], error: "" });
   const [draft, setDraft] = useState({ productId: "", cantidad: 1 });
   const [items, setItems] = useState([]);
   const [busy, setBusy] = useState({ creating: false, error: "" });
+  const [filters, setFilters] = useState({
+    codigo: "",
+    descripcion: "",
+    categoria: "",
+    subCategoria: "",
+    codigoBarras: "",
+    referencia: ""
+  });
 
   const draftKey = role === "Vendedor" && userId ? `draft_order_${userId}` : "";
 
@@ -378,8 +391,26 @@ function OrdersPanel({ role, userId }) {
     }
   }
 
+  async function loadMeta() {
+    try {
+      setMeta((s) => ({ ...s, loading: true, error: "" }));
+      const { data } = await api.get("/api/products/meta");
+      setMeta({
+        loading: false,
+        categories: Array.isArray(data?.categories) ? data.categories : [],
+        subCategories: Array.isArray(data?.subCategories) ? data.subCategories : [],
+        barcodes: Array.isArray(data?.barcodes) ? data.barcodes : [],
+        error: ""
+      });
+    } catch (err) {
+      const message = err?.response?.data?.message || err?.message || "No se pudo cargar filtros.";
+      setMeta({ loading: false, categories: [], subCategories: [], barcodes: [], error: message });
+    }
+  }
+
   useEffect(() => {
     loadProducts();
+    loadMeta();
     loadOrders();
   }, []);
 
@@ -447,10 +478,74 @@ function OrdersPanel({ role, userId }) {
         <div className="card" style={{ marginBottom: 14 }}>
           <div className="cardTitle">Nuevo pedido</div>
           <form onSubmit={createOrder} className="stack">
+            <div className="grid2">
+              <input
+                className="input"
+                placeholder="Código"
+                value={filters.codigo}
+                onChange={(e) => setFilters((s) => ({ ...s, codigo: e.target.value }))}
+              />
+              <input
+                className="input"
+                placeholder="Descripción"
+                value={filters.descripcion}
+                onChange={(e) => setFilters((s) => ({ ...s, descripcion: e.target.value }))}
+              />
+            </div>
+            <div className="grid2">
+              <select className="input" value={filters.categoria} onChange={(e) => setFilters((s) => ({ ...s, categoria: e.target.value, subCategoria: "" }))}>
+                <option value="">Categoría…</option>
+                {meta.categories.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+              <select className="input" value={filters.subCategoria} onChange={(e) => setFilters((s) => ({ ...s, subCategoria: e.target.value }))}>
+                <option value="">SubCategoría…</option>
+                {meta.subCategories
+                  .filter((s) => !filters.categoria || true)
+                  .map((c) => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))}
+              </select>
+            </div>
+            <div className="grid2">
+              <input
+                className="input"
+                placeholder="Referencia"
+                value={filters.referencia}
+                onChange={(e) => setFilters((s) => ({ ...s, referencia: e.target.value }))}
+              />
+              <select className="input" value={filters.codigoBarras} onChange={(e) => setFilters((s) => ({ ...s, codigoBarras: e.target.value }))}>
+                <option value="">Código barras…</option>
+                {meta.barcodes.map((b) => (
+                  <option key={b} value={b}>
+                    {b}
+                  </option>
+                ))}
+              </select>
+            </div>
             <div className="row">
               <select className="input" value={draft.productId} onChange={(e) => setDraft((s) => ({ ...s, productId: e.target.value }))}>
                 <option value="">Selecciona producto…</option>
-                {products.items.map((p) => (
+                {products.items
+                  .filter((p) => {
+                    const okCodigo = !filters.codigo || String(p.sku || "").toLowerCase().includes(String(filters.codigo).toLowerCase());
+                    const okDesc =
+                      !filters.descripcion ||
+                      String(p.nombre || "").toLowerCase().includes(String(filters.descripcion).toLowerCase()) ||
+                      String(p.descripcion || "").toLowerCase().includes(String(filters.descripcion).toLowerCase());
+                    const okCat = !filters.categoria || String(p.categoria || "") === String(filters.categoria);
+                    const okSub = !filters.subCategoria || String(p.subCategoria || "") === String(filters.subCategoria);
+                    const okRef = !filters.referencia || String(p.referencia || "").toLowerCase().includes(String(filters.referencia).toLowerCase());
+                    const okBar =
+                      !filters.codigoBarras || String(p.codigoBarras || "").toLowerCase().includes(String(filters.codigoBarras).toLowerCase());
+                    return okCodigo && okDesc && okCat && okSub && okRef && okBar;
+                  })
+                  .map((p) => (
                   <option key={p._id} value={p._id}>
                     {p.nombre} (SKU {p.sku}) · {formatMoney(p.precio)} · stock {p.stock}
                   </option>
@@ -899,6 +994,25 @@ function InventoryPanel() {
   const [imageUpload, setImageUpload] = useState({ productId: "", file: null, loading: false, error: "", ok: "" });
   const [low, setLow] = useState({ loading: false, threshold: 5, items: [], error: "" });
   const apiBase = import.meta?.env?.VITE_API_URL || "";
+  const { meta, reload: reloadMeta } = useProductsMeta();
+  const [create, setCreate] = useState({
+    sku: "",
+    nombre: "",
+    descripcion: "",
+    categoria: "",
+    subCategoria: "",
+    referencia: "",
+    codigoBarras: "",
+    proveedor: "",
+    precio: 0,
+    stock: 0,
+    iva: 19,
+    unidadMedida: "UND",
+    loading: false,
+    error: "",
+    ok: ""
+  });
+  const [bulk, setBulk] = useState({ file: null, loading: false, error: "", ok: "" });
 
   async function loadCatalog() {
     try {
@@ -944,6 +1058,51 @@ function InventoryPanel() {
     }
   }
 
+  async function onCreateProduct(e) {
+    e.preventDefault();
+    try {
+      setCreate((s) => ({ ...s, loading: true, error: "", ok: "" }));
+      const payload = {
+        sku: create.sku,
+        nombre: create.nombre,
+        descripcion: create.descripcion,
+        categoria: create.categoria,
+        subCategoria: create.subCategoria,
+        referencia: create.referencia,
+        codigoBarras: create.codigoBarras,
+        proveedor: create.proveedor,
+        precio: Number(create.precio),
+        stock: Number(create.stock),
+        iva: Number(create.iva),
+        unidadMedida: create.unidadMedida
+      };
+      await api.post("/api/products", payload);
+      setCreate((s) => ({ ...s, loading: false, ok: "Producto creado." }));
+      await loadCatalog();
+      await reloadMeta();
+    } catch (err) {
+      const message = err?.response?.data?.message || err?.message || "No se pudo crear.";
+      setCreate((s) => ({ ...s, loading: false, error: message, ok: "" }));
+    }
+  }
+
+  async function onBulkUpload(e) {
+    e.preventDefault();
+    if (!bulk.file) return setBulk((s) => ({ ...s, error: "Selecciona un archivo." }));
+    try {
+      setBulk((s) => ({ ...s, loading: true, error: "", ok: "" }));
+      const form = new FormData();
+      form.append("file", bulk.file);
+      const { data } = await api.post("/api/products/bulk", form);
+      setBulk((s) => ({ ...s, loading: false, ok: `Carga OK: ${data?.insertedCount || 0} productos.` }));
+      await loadCatalog();
+      await reloadMeta();
+    } catch (err) {
+      const message = err?.response?.data?.message || err?.message || "No se pudo cargar archivo.";
+      setBulk((s) => ({ ...s, loading: false, error: message, ok: "" }));
+    }
+  }
+
   return (
     <Panel
       title="Inventario"
@@ -960,6 +1119,68 @@ function InventoryPanel() {
       }
     >
       <div className="grid2" style={{ alignItems: "start" }}>
+        <div className="card">
+          <div className="cardTitle">Crear producto</div>
+          <form onSubmit={onCreateProduct} className="stack">
+            <div className="grid2">
+              <input className="input" placeholder="Código (SKU)" value={create.sku} onChange={(e) => setCreate((s) => ({ ...s, sku: e.target.value }))} />
+              <input className="input" placeholder="Nombre" value={create.nombre} onChange={(e) => setCreate((s) => ({ ...s, nombre: e.target.value }))} />
+            </div>
+            <input className="input" placeholder="Descripción" value={create.descripcion} onChange={(e) => setCreate((s) => ({ ...s, descripcion: e.target.value }))} />
+            <div className="grid2">
+              <select className="input" value={create.categoria} onChange={(e) => setCreate((s) => ({ ...s, categoria: e.target.value }))}>
+                <option value="">Categoría…</option>
+                {meta.categories.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+              <input className="input" placeholder="SubCategoría" value={create.subCategoria} onChange={(e) => setCreate((s) => ({ ...s, subCategoria: e.target.value }))} />
+            </div>
+            <div className="grid2">
+              <input className="input" placeholder="Referencia" value={create.referencia} onChange={(e) => setCreate((s) => ({ ...s, referencia: e.target.value }))} />
+              <input className="input" placeholder="Código barras" value={create.codigoBarras} onChange={(e) => setCreate((s) => ({ ...s, codigoBarras: e.target.value }))} />
+            </div>
+            <div className="grid2">
+              <input className="input" placeholder="Proveedor" value={create.proveedor} onChange={(e) => setCreate((s) => ({ ...s, proveedor: e.target.value }))} />
+              <input className="input" placeholder="Unidad medida" value={create.unidadMedida} onChange={(e) => setCreate((s) => ({ ...s, unidadMedida: e.target.value }))} />
+            </div>
+            <div className="grid2">
+              <input className="input" type="number" placeholder="Precio" value={create.precio} onChange={(e) => setCreate((s) => ({ ...s, precio: Number(e.target.value) }))} />
+              <input className="input" type="number" placeholder="Stock" value={create.stock} onChange={(e) => setCreate((s) => ({ ...s, stock: Number(e.target.value) }))} />
+            </div>
+            <input className="input" type="number" placeholder="IVA (%)" value={create.iva} onChange={(e) => setCreate((s) => ({ ...s, iva: Number(e.target.value) }))} />
+            <button className="btn primary" disabled={create.loading} type="submit">
+              {create.loading ? "Guardando…" : "Crear"}
+            </button>
+          </form>
+          {create.error ? <p className="bad">ERROR: {create.error}</p> : null}
+          {create.ok ? <p className="ok">{create.ok}</p> : null}
+        </div>
+
+        <div className="card">
+          <div className="cardTitle">Carga rápida (CSV / Excel)</div>
+          <form onSubmit={onBulkUpload} className="stack">
+            <input
+              className="input"
+              type="file"
+              accept=".csv,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv"
+              onChange={(e) => setBulk((s) => ({ ...s, file: e.target.files?.[0] || null }))}
+            />
+            <button className="btn primary" disabled={bulk.loading} type="submit">
+              {bulk.loading ? "Cargando…" : "Cargar"}
+            </button>
+          </form>
+          {bulk.error ? <p className="bad">ERROR: {bulk.error}</p> : null}
+          {bulk.ok ? <p className="ok">{bulk.ok}</p> : null}
+          <p className="muted">
+            Columnas soportadas: <code>sku</code>, <code>nombre</code>, <code>descripcion</code>, <code>categoria</code>,{" "}
+            <code>subCategoria</code>, <code>referencia</code>, <code>codigoBarras</code>, <code>precio</code>,{" "}
+            <code>stock</code>, <code>iva</code>, <code>unidadMedida</code>, <code>proveedor</code>.
+          </p>
+        </div>
+
         <div className="card">
           <div className="cardTitle">Subir foto</div>
           <form onSubmit={onUploadProductImage} className="stack">
@@ -1604,6 +1825,277 @@ function CustomerOrdersPanel() {
             ) : null}
           </tbody>
         </table>
+      </div>
+    </Panel>
+  );
+}
+
+function useProductsMeta() {
+  const [meta, setMeta] = useState({ loading: false, categories: [], subCategories: [], barcodes: [], error: "" });
+
+  async function load() {
+    try {
+      setMeta((s) => ({ ...s, loading: true, error: "" }));
+      const { data } = await api.get("/api/products/meta");
+      setMeta({
+        loading: false,
+        categories: Array.isArray(data?.categories) ? data.categories : [],
+        subCategories: Array.isArray(data?.subCategories) ? data.subCategories : [],
+        barcodes: Array.isArray(data?.barcodes) ? data.barcodes : [],
+        error: ""
+      });
+    } catch (err) {
+      const message = err?.response?.data?.message || err?.message || "No se pudo cargar meta.";
+      setMeta({ loading: false, categories: [], subCategories: [], barcodes: [], error: message });
+    }
+  }
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  return { meta, reload: load };
+}
+
+function SearchArticlesPanel() {
+  const { meta } = useProductsMeta();
+  const [filters, setFilters] = useState({
+    codigo: "",
+    descripcion: "",
+    categoria: "",
+    subCategoria: "",
+    referencia: "",
+    codigoBarras: ""
+  });
+  const [state, setState] = useState({ loading: false, items: [], error: "" });
+
+  async function search(e) {
+    e?.preventDefault?.();
+    try {
+      setState({ loading: true, items: [], error: "" });
+      const { data } = await api.get("/api/products", { params: filters });
+      setState({ loading: false, items: Array.isArray(data?.items) ? data.items : [], error: "" });
+    } catch (err) {
+      const message = err?.response?.data?.message || err?.message || "No se pudo buscar.";
+      setState({ loading: false, items: [], error: message });
+    }
+  }
+
+  useEffect(() => {
+    search();
+  }, []);
+
+  return (
+    <Panel title="Buscar Artículos" subtitle="Filtra por código, descripción, categorías, referencia o código de barras.">
+      <form onSubmit={search} className="card">
+        <div className="grid2">
+          <div>
+            <div className="muted">Código</div>
+            <input className="input" value={filters.codigo} onChange={(e) => setFilters((s) => ({ ...s, codigo: e.target.value }))} />
+          </div>
+          <div>
+            <div className="muted">Descripción</div>
+            <input className="input" value={filters.descripcion} onChange={(e) => setFilters((s) => ({ ...s, descripcion: e.target.value }))} />
+          </div>
+        </div>
+        <div className="grid2" style={{ marginTop: 10 }}>
+          <div>
+            <div className="muted">Categoría</div>
+            <select className="input" value={filters.categoria} onChange={(e) => setFilters((s) => ({ ...s, categoria: e.target.value, subCategoria: "" }))}>
+              <option value="">Seleccionar…</option>
+              {meta.categories.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <div className="muted">SubCategoría</div>
+            <select className="input" value={filters.subCategoria} onChange={(e) => setFilters((s) => ({ ...s, subCategoria: e.target.value }))}>
+              <option value="">Seleccionar…</option>
+              {meta.subCategories.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+        <div className="grid2" style={{ marginTop: 10 }}>
+          <div>
+            <div className="muted">Referencia</div>
+            <input className="input" value={filters.referencia} onChange={(e) => setFilters((s) => ({ ...s, referencia: e.target.value }))} />
+          </div>
+          <div>
+            <div className="muted">Código barras</div>
+            <select className="input" value={filters.codigoBarras} onChange={(e) => setFilters((s) => ({ ...s, codigoBarras: e.target.value }))}>
+              <option value="">Seleccionar…</option>
+              {meta.barcodes.map((b) => (
+                <option key={b} value={b}>
+                  {b}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div className="row" style={{ marginTop: 12 }}>
+          <button className="btn primary" disabled={state.loading} type="submit">
+            {state.loading ? "Buscando…" : "Buscar"}
+          </button>
+          <button
+            className="btn"
+            type="button"
+            onClick={() =>
+              setFilters({ codigo: "", descripcion: "", categoria: "", subCategoria: "", referencia: "", codigoBarras: "" })
+            }
+          >
+            Limpiar
+          </button>
+        </div>
+      </form>
+
+      {state.error ? <p className="bad">ERROR: {state.error}</p> : null}
+      <div className="tableWrap" style={{ marginTop: 14 }}>
+        <table className="table">
+          <thead>
+            <tr>
+              <th>Código</th>
+              <th>Descripción</th>
+              <th>Categoría</th>
+              <th>SubCategoría</th>
+              <th>Referencia</th>
+              <th>Código barras</th>
+              <th>Stock</th>
+            </tr>
+          </thead>
+          <tbody>
+            {state.items.map((p) => (
+              <tr key={p._id}>
+                <td>
+                  <code>{p.sku}</code>
+                </td>
+                <td>{p.descripcion || p.nombre}</td>
+                <td>{p.categoria || "—"}</td>
+                <td>{p.subCategoria || "—"}</td>
+                <td>{p.referencia || "—"}</td>
+                <td>{p.codigoBarras || "—"}</td>
+                <td>{p.stock}</td>
+              </tr>
+            ))}
+            {!state.loading && !state.items.length ? (
+              <tr>
+                <td colSpan={7} className="muted">
+                  Sin resultados.
+                </td>
+              </tr>
+            ) : null}
+          </tbody>
+        </table>
+      </div>
+    </Panel>
+  );
+}
+
+function CatalogPanel() {
+  const apiBase = import.meta?.env?.VITE_API_URL || "";
+  const { meta } = useProductsMeta();
+  const [filters, setFilters] = useState({
+    codigo: "",
+    descripcion: "",
+    categoria: "",
+    subCategoria: "",
+    referencia: "",
+    codigoBarras: ""
+  });
+
+  function downloadPdf() {
+    const params = new URLSearchParams();
+    for (const [k, v] of Object.entries(filters)) {
+      if (String(v || "").trim()) params.set(k, String(v).trim());
+    }
+    const url = `${apiBase}/api/products/catalog.pdf?${params.toString()}`;
+    window.open(url, "_blank", "noopener,noreferrer");
+  }
+
+  return (
+    <Panel title="Catálogo" subtitle="Filtra y descarga el catálogo en PDF.">
+      <div className="card">
+        <div className="grid2">
+          <div>
+            <div className="muted">Código</div>
+            <input className="input" value={filters.codigo} onChange={(e) => setFilters((s) => ({ ...s, codigo: e.target.value }))} />
+          </div>
+          <div>
+            <div className="muted">Descripción</div>
+            <input
+              className="input"
+              value={filters.descripcion}
+              onChange={(e) => setFilters((s) => ({ ...s, descripcion: e.target.value }))}
+            />
+          </div>
+        </div>
+        <div className="grid2" style={{ marginTop: 10 }}>
+          <div>
+            <div className="muted">Categoría</div>
+            <select className="input" value={filters.categoria} onChange={(e) => setFilters((s) => ({ ...s, categoria: e.target.value, subCategoria: "" }))}>
+              <option value="">Seleccionar…</option>
+              {meta.categories.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <div className="muted">SubCategoría</div>
+            <select className="input" value={filters.subCategoria} onChange={(e) => setFilters((s) => ({ ...s, subCategoria: e.target.value }))}>
+              <option value="">Seleccionar…</option>
+              {meta.subCategories.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+        <div className="grid2" style={{ marginTop: 10 }}>
+          <div>
+            <div className="muted">Referencia</div>
+            <input className="input" value={filters.referencia} onChange={(e) => setFilters((s) => ({ ...s, referencia: e.target.value }))} />
+          </div>
+          <div>
+            <div className="muted">Código barras</div>
+            <select className="input" value={filters.codigoBarras} onChange={(e) => setFilters((s) => ({ ...s, codigoBarras: e.target.value }))}>
+              <option value="">Seleccionar…</option>
+              {meta.barcodes.map((b) => (
+                <option key={b} value={b}>
+                  {b}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+        <div className="row" style={{ marginTop: 12, justifyContent: "space-between" }}>
+          <div className="row">
+            <button className="btn primary" type="button" onClick={downloadPdf}>
+              Descargar PDF
+            </button>
+            <button
+              className="btn"
+              type="button"
+              onClick={() =>
+                setFilters({ codigo: "", descripcion: "", categoria: "", subCategoria: "", referencia: "", codigoBarras: "" })
+              }
+            >
+              Limpiar
+            </button>
+          </div>
+          <p className="muted" style={{ margin: 0 }}>
+            El PDF se genera en el backend.
+          </p>
+        </div>
       </div>
     </Panel>
   );

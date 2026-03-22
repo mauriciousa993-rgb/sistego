@@ -124,6 +124,11 @@ Reportes:
 Inventario:
 - `GET /api/products/low-stock?threshold=5` (Admin) sugerencia de productos con bajo inventario (usa campo opcional `proveedor`).
 - `GET /api/products/export.xlsx` (Admin) export inventario a Excel.
+- `GET /api/products/meta` (Auth) categorías/subcategorías/barcodes para filtros.
+- `GET /api/products?codigo=&descripcion=&categoria=&subCategoria=&referencia=&codigoBarras=` (público) búsqueda/filtrado.
+- `GET /api/products/catalog.pdf` (Vendedor/Cliente/Admin) descarga de catálogo PDF (con query filters).
+- `POST /api/products` (Admin) crear producto manual.
+- `POST /api/products/bulk` (Admin) carga masiva Excel/CSV.
 
 Tienda (Cliente):
 - `GET /api/shop/products` (Cliente) productos disponibles (stock > 0)
