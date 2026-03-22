@@ -25,6 +25,24 @@ function computeTotal(items, productsById) {
   return Math.round(total * 100) / 100;
 }
 
+function toDetailedItems(items, productsById) {
+  return items.map((it) => {
+    const p = productsById.get(String(it.product));
+    const precioUnit = Number(p?.precio) || 0;
+    const iva = Number(p?.iva) || 0;
+    const costoUnit = Number(p?.costo) || 0;
+    return {
+      product: it.product,
+      cantidad: it.cantidad,
+      sku: String(p?.sku || ""),
+      nombre: String(p?.nombre || ""),
+      precioUnit,
+      iva,
+      costoUnit
+    };
+  });
+}
+
 // Catálogo para cliente final: solo disponibles (stock > 0)
 async function listShopProducts(_req, res) {
   try {
@@ -58,7 +76,7 @@ async function createShopOrder(req, res) {
 
     const productIds = normalizedItems.map((it) => it.product);
     const products = await Product.find({ _id: { $in: productIds } })
-      .select("precio iva stock")
+      .select("sku nombre precio iva costo stock")
       .lean();
     const productsById = new Map(products.map((p) => [String(p._id), p]));
     if (productsById.size !== productIds.length) return res.status(400).json({ message: "Uno o más productos no existen." });
@@ -71,11 +89,12 @@ async function createShopOrder(req, res) {
     }
     if (insufficient.length) return res.status(400).json({ message: "Stock insuficiente.", details: insufficient });
 
+    const detailedItems = toDetailedItems(normalizedItems, productsById);
     const total = computeTotal(normalizedItems, productsById);
     const order = await Order.create({
       source: "Cliente",
       customerId: toObjectId(userId),
-      items: normalizedItems,
+      items: detailedItems,
       total,
       estado: "En Bodega"
     });

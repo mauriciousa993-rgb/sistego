@@ -14,6 +14,9 @@ const productSchema = new mongoose.Schema(
     referencia: { type: String, trim: true, index: true, default: "" },
     codigoBarras: { type: String, trim: true, index: true, default: "" },
 
+    // Costeo (para rentabilidad)
+    costo: { type: Number, default: 0, min: 0 },
+
     precio: { type: Number, required: true, min: 0 },
     stock: { type: Number, required: true, min: 0 },
     // IVA en porcentaje (por ejemplo: 19 para 19%)

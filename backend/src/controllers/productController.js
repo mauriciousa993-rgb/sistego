@@ -131,6 +131,7 @@ async function bulkUploadProducts(req, res) {
     ];
 
     const optional = [
+      { key: "costo", aliases: ["costo", "cost", "costoUnit", "costo_unit"] },
       { key: "proveedor", aliases: ["proveedor", "supplier", "vendor"] },
       { key: "descripcion", aliases: ["descripcion", "description"] },
       { key: "categoria", aliases: ["categoria", "category"] },
@@ -184,6 +185,7 @@ async function bulkUploadProducts(req, res) {
       const subCategoria = extracted.subCategoria ? String(extracted.subCategoria).trim() : "";
       const referencia = extracted.referencia ? String(extracted.referencia).trim() : "";
       const codigoBarras = extracted.codigoBarras ? String(extracted.codigoBarras).trim() : "";
+      const costo = extracted.costo !== undefined && extracted.costo !== "" ? parseNumber(extracted.costo, "costo") : 0;
 
       productsToInsert.push({
         sku,
@@ -193,6 +195,7 @@ async function bulkUploadProducts(req, res) {
         subCategoria,
         referencia,
         codigoBarras,
+        costo,
         precio,
         stock,
         iva,
@@ -227,7 +230,9 @@ async function listProducts(req, res) {
     const filter = buildProductFilter(req.query);
     const items = await Product.find(filter)
       .sort({ createdAt: -1 })
-      .select("sku nombre descripcion categoria subCategoria referencia codigoBarras precio stock iva unidadMedida imageUrl proveedor")
+      .select(
+        "active sku nombre descripcion categoria subCategoria referencia codigoBarras costo precio stock iva unidadMedida imageUrl proveedor"
+      )
       .lean();
     return res.json({ items });
   } catch (err) {
@@ -273,6 +278,7 @@ async function createProduct(req, res) {
       subCategoria: body.subCategoria ? String(body.subCategoria).trim() : "",
       referencia: body.referencia ? String(body.referencia).trim() : "",
       codigoBarras: body.codigoBarras ? String(body.codigoBarras).trim() : "",
+      costo: body.costo != null ? parseNumber(body.costo, "costo") : 0,
       precio: parseNumber(body.precio, "precio"),
       stock: parseNumber(body.stock, "stock"),
       iva: parseNumber(body.iva, "iva"),
@@ -314,13 +320,14 @@ async function exportProductsXlsx(_req, res) {
   try {
     const items = await Product.find({ active: { $ne: false } })
       .sort({ nombre: 1 })
-      .select("sku nombre proveedor precio stock iva unidadMedida imageUrl")
+      .select("sku nombre proveedor costo precio stock iva unidadMedida imageUrl")
       .lean();
 
     const rows = items.map((p) => ({
       sku: p.sku,
       nombre: p.nombre,
       proveedor: p.proveedor || "",
+      costo: p.costo ?? 0,
       precio: p.precio,
       stock: p.stock,
       iva: p.iva,

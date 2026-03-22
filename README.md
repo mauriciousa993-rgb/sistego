@@ -132,6 +132,12 @@ Inventario:
 - `PATCH /api/products/:id/stock` (Bodega/Admin) ajustar stock manual.
 - `DELETE /api/products/:id` (Bodega/Admin) desactivar (borrado lógico) producto.
 
+Rentabilidad:
+- En productos agrega `costo` (costo unitario) para calcular utilidad.
+- Reportes (Admin) soportan `from` y `to` (YYYY-MM-DD):
+  - `GET /api/reports/sales/summary?from=2026-01-01&to=2026-01-31` incluye `totalCost`, `grossProfit`, `margin`.
+  - `GET /api/reports/profit/by-product?from=...&to=...` rentabilidad por producto.
+
 Tienda (Cliente):
 - `GET /api/shop/products` (Cliente) productos disponibles (stock > 0)
 - `POST /api/shop/orders` (Cliente) crea pedido y entra directo a `En Bodega`

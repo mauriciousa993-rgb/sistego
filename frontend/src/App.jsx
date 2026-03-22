@@ -1039,6 +1039,7 @@ function InventoryPanel() {
     referencia: "",
     codigoBarras: "",
     proveedor: "",
+    costo: "",
     precio: "",
     stock: "",
     iva: 19,
@@ -1106,6 +1107,7 @@ function InventoryPanel() {
         referencia: create.referencia,
         codigoBarras: create.codigoBarras,
         proveedor: create.proveedor,
+        costo: Number(create.costo || 0),
         precio: Number(create.precio || 0),
         stock: Number(create.stock || 0),
         iva: Number(create.iva),
@@ -1186,6 +1188,19 @@ function InventoryPanel() {
             <div className="grid2">
               <input className="input" placeholder="Proveedor" value={create.proveedor} onChange={(e) => setCreate((s) => ({ ...s, proveedor: e.target.value }))} />
               <input className="input" placeholder="Unidad medida" value={create.unidadMedida} onChange={(e) => setCreate((s) => ({ ...s, unidadMedida: e.target.value }))} />
+            </div>
+            <div>
+              <div className="muted">Costo (COP)</div>
+              <input
+                className="input"
+                type="number"
+                inputMode="decimal"
+                min="0"
+                step="0.01"
+                placeholder="Ej: 15000"
+                value={create.costo}
+                onChange={(e) => setCreate((s) => ({ ...s, costo: e.target.value }))}
+              />
             </div>
             <div className="grid2">
               <div>
@@ -2323,18 +2338,33 @@ function CatalogPanel() {
 function ReportsPanel() {
   const [summary, setSummary] = useState({ loading: false, data: null, error: "" });
   const [byVendor, setByVendor] = useState({ loading: false, items: [], error: "" });
+  const [byProduct, setByProduct] = useState({ loading: false, items: [], error: "" });
+  const [range, setRange] = useState(() => {
+    const to = new Date();
+    const from = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const fmt = (d) => d.toISOString().slice(0, 10);
+    return { from: fmt(from), to: fmt(to) };
+  });
 
   async function load() {
     try {
       setSummary({ loading: true, data: null, error: "" });
       setByVendor({ loading: true, items: [], error: "" });
-      const [a, b] = await Promise.all([api.get("/api/reports/sales/summary"), api.get("/api/reports/sales/by-vendor")]);
+      setByProduct({ loading: true, items: [], error: "" });
+      const params = { from: range.from, to: range.to };
+      const [a, b, c] = await Promise.all([
+        api.get("/api/reports/sales/summary", { params }),
+        api.get("/api/reports/sales/by-vendor", { params }),
+        api.get("/api/reports/profit/by-product", { params })
+      ]);
       setSummary({ loading: false, data: a.data, error: "" });
       setByVendor({ loading: false, items: Array.isArray(b.data?.items) ? b.data.items : [], error: "" });
+      setByProduct({ loading: false, items: Array.isArray(c.data?.items) ? c.data.items : [], error: "" });
     } catch (err) {
       const message = err?.response?.data?.message || err?.message || "No se pudo cargar reportes.";
       setSummary({ loading: false, data: null, error: message });
       setByVendor({ loading: false, items: [], error: message });
+      setByProduct({ loading: false, items: [], error: message });
     }
   }
 
@@ -2345,7 +2375,7 @@ function ReportsPanel() {
   return (
     <Panel
       title="Reportes"
-      subtitle="Ventas generales y por vendedor (según facturas emitidas)."
+      subtitle="Ventas y rentabilidad (según facturas emitidas) en el rango seleccionado."
       right={
         <button className="btn" type="button" onClick={load} disabled={summary.loading || byVendor.loading}>
           {summary.loading || byVendor.loading ? "Cargando…" : "Refrescar"}
@@ -2353,6 +2383,26 @@ function ReportsPanel() {
       }
     >
       {summary.error ? <p className="bad">ERROR: {summary.error}</p> : null}
+      <div className="card" style={{ marginBottom: 14 }}>
+        <div className="row" style={{ justifyContent: "space-between" }}>
+          <div className="cardTitle" style={{ margin: 0 }}>
+            Rango de fechas
+          </div>
+          <button className="btn" type="button" onClick={load}>
+            Aplicar
+          </button>
+        </div>
+        <div className="grid2" style={{ marginTop: 10 }}>
+          <div>
+            <div className="muted">Desde</div>
+            <input className="input" type="date" value={range.from} onChange={(e) => setRange((s) => ({ ...s, from: e.target.value }))} />
+          </div>
+          <div>
+            <div className="muted">Hasta</div>
+            <input className="input" type="date" value={range.to} onChange={(e) => setRange((s) => ({ ...s, to: e.target.value }))} />
+          </div>
+        </div>
+      </div>
       <div className="grid2">
         <div className="card">
           <div className="cardTitle">Resumen (últimos 30 días)</div>
@@ -2364,6 +2414,22 @@ function ReportsPanel() {
             <div className="kpi">
               <div className="kpiLabel">Ventas</div>
               <div className="kpiValue">{summary.data ? formatMoney(summary.data.totalSales) : "—"}</div>
+            </div>
+            <div className="kpi">
+              <div className="kpiLabel">Costo</div>
+              <div className="kpiValue">{summary.data ? formatMoney(summary.data.totalCost) : "—"}</div>
+            </div>
+            <div className="kpi">
+              <div className="kpiLabel">Utilidad</div>
+              <div className="kpiValue">
+                {summary.data ? (
+                  <>
+                    {formatMoney(summary.data.grossProfit)} <span className="muted">· {summary.data.margin}%</span>
+                  </>
+                ) : (
+                  "—"
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -2377,6 +2443,7 @@ function ReportsPanel() {
                   <th>Vendedor</th>
                   <th>Facturas</th>
                   <th>Ventas</th>
+                  <th>Utilidad</th>
                 </tr>
               </thead>
               <tbody>
@@ -2385,11 +2452,14 @@ function ReportsPanel() {
                     <td>{r.vendedor?.nombre || r.vendedor?.email || r.vendedorId}</td>
                     <td>{r.invoices}</td>
                     <td>{formatMoney(r.totalSales)}</td>
+                    <td>
+                      {formatMoney(r.grossProfit)} <span className="muted">({r.margin}%)</span>
+                    </td>
                   </tr>
                 ))}
                 {!byVendor.loading && !byVendor.items.length ? (
                   <tr>
-                    <td colSpan={3} className="muted">
+                    <td colSpan={4} className="muted">
                       Sin datos.
                     </td>
                   </tr>
@@ -2397,6 +2467,45 @@ function ReportsPanel() {
               </tbody>
             </table>
           </div>
+        </div>
+      </div>
+
+      <div className="card" style={{ marginTop: 14 }}>
+        <div className="cardTitle">Rentabilidad por producto</div>
+        <div className="tableWrap" style={{ marginTop: 10 }}>
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Producto</th>
+                <th>Qty</th>
+                <th>Ventas</th>
+                <th>Costo</th>
+                <th>Utilidad</th>
+              </tr>
+            </thead>
+            <tbody>
+              {byProduct.items.map((r) => (
+                <tr key={r.productId}>
+                  <td>
+                    {r.nombre} <span className="muted">({r.sku})</span>
+                  </td>
+                  <td>{r.qty}</td>
+                  <td>{formatMoney(r.totalSales)}</td>
+                  <td>{formatMoney(r.totalCost)}</td>
+                  <td>
+                    {formatMoney(r.grossProfit)} <span className="muted">({r.margin}%)</span>
+                  </td>
+                </tr>
+              ))}
+              {!byProduct.loading && !byProduct.items.length ? (
+                <tr>
+                  <td colSpan={5} className="muted">
+                    Sin datos.
+                  </td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
         </div>
       </div>
     </Panel>

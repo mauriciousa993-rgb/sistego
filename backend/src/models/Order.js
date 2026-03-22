@@ -7,7 +7,14 @@ const ORDER_SOURCES = ["Vendedor", "Cliente"];
 const orderItemSchema = new mongoose.Schema(
   {
     product: { type: mongoose.Schema.Types.ObjectId, ref: "Product", required: true },
-    cantidad: { type: Number, required: true, min: 1 }
+    cantidad: { type: Number, required: true, min: 1 },
+
+    // Snapshot para rentabilidad histórica
+    sku: { type: String, default: "" },
+    nombre: { type: String, default: "" },
+    precioUnit: { type: Number, default: 0 },
+    iva: { type: Number, default: 0 },
+    costoUnit: { type: Number, default: 0 }
   },
   { _id: false }
 );
