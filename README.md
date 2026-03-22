@@ -145,6 +145,10 @@ Tienda (Cliente):
 - `POST /api/shop/orders` (Cliente) crea pedido y entra directo a `En Bodega`
 - `GET /api/shop/orders` (Cliente) lista sus pedidos
 
+Marketplace (público):
+- `GET /api/marketplace/products` catálogo público (stock > 0)
+- `POST /api/marketplace/orders` crea pedido público (multipart): fields `items` (JSON), `deliveryMethod`, `deliveryAddress`, `wantsInvoice`, `rut` (opcional), `paymentProof` (opcional)
+
 Compras:
 - `POST /api/purchase-orders` (Admin) crear orden de compra por proveedor
 - `GET /api/purchase-orders` (Admin) listar órdenes de compra

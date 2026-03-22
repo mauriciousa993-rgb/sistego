@@ -2,7 +2,7 @@ const mongoose = require("mongoose");
 const Counter = require("./Counter");
 
 const ORDER_STATUSES = ["Pendiente", "En Bodega", "Despachado", "Facturado", "Cancelado"];
-const ORDER_SOURCES = ["Vendedor", "Cliente"];
+const ORDER_SOURCES = ["Vendedor", "Cliente", "Marketplace"];
 
 const orderItemSchema = new mongoose.Schema(
   {
@@ -28,6 +28,35 @@ const orderSchema = new mongoose.Schema(
     customerId: { type: mongoose.Schema.Types.ObjectId, index: true },
     // Cliente comercial (cartera) asociado a un vendedor (Customer)
     customerRefId: { type: mongoose.Schema.Types.ObjectId, ref: "Customer", index: true },
+    // Marketplace (público): datos de comprador
+    marketplaceCustomer: {
+      nombre: { type: String, default: "" },
+      documento: { type: String, default: "" },
+      telefono: { type: String, default: "" },
+      email: { type: String, default: "" },
+      direccion: { type: String, default: "" }
+    },
+    wantsInvoice: { type: Boolean, default: false },
+    invoiceData: {
+      nit: { type: String, default: "" },
+      dv: { type: String, default: "" },
+      razonSocial: { type: String, default: "" },
+      nombreComercial: { type: String, default: "" },
+      direccion: { type: String, default: "" },
+      ciudad: { type: String, default: "" },
+      departamento: { type: String, default: "" },
+      pais: { type: String, default: "" },
+      telefono: { type: String, default: "" },
+      email: { type: String, default: "" },
+      regimen: { type: String, default: "" },
+      responsabilidades: { type: [String], default: [] }
+    },
+    rutUrl: { type: String, default: "" },
+    rutPublicId: { type: String, default: "" },
+    deliveryMethod: { type: String, enum: ["RecogeEnBodega", "Domicilio"], default: "RecogeEnBodega", index: true },
+    deliveryAddress: { type: String, default: "" },
+    paymentProofUrl: { type: String, default: "" },
+    paymentProofPublicId: { type: String, default: "" },
     items: { type: [orderItemSchema], required: true },
     total: { type: Number, required: true, min: 0 },
     estado: { type: String, enum: ORDER_STATUSES, default: "Pendiente", index: true }
