@@ -1,7 +1,7 @@
 const mongoose = require("mongoose");
 const Counter = require("./Counter");
 
-const ORDER_STATUSES = ["Pendiente", "En Bodega", "Despachado", "Facturado"];
+const ORDER_STATUSES = ["Pendiente", "En Bodega", "Despachado", "Facturado", "Cancelado"];
 
 const orderItemSchema = new mongoose.Schema(
   {
@@ -43,4 +43,3 @@ module.exports = {
   Order: mongoose.model("Order", orderSchema),
   ORDER_STATUSES
 };
-

@@ -122,6 +122,20 @@ Reportes:
 
 Inventario:
 - `GET /api/products/low-stock?threshold=5` (Admin) sugerencia de productos con bajo inventario (usa campo opcional `proveedor`).
+- `GET /api/products/export.xlsx` (Admin) export inventario a Excel.
+
+Compras:
+- `POST /api/purchase-orders` (Admin) crear orden de compra por proveedor
+- `GET /api/purchase-orders` (Admin) listar órdenes de compra
+- `PATCH /api/purchase-orders/:id/receive` (Admin) recibir y aumentar stock
+
+Pedidos (flujo):
+- `PATCH /api/orders/:id/approve` (Admin) pasa de `Pendiente` a `En Bodega`
+- `PATCH /api/orders/:id/dispatch` (Bodega) solo permite `En Bodega`
+- `PATCH /api/orders/:id/cancel` (Admin) cancela `Pendiente/En Bodega`
+
+Auditoría:
+- `GET /api/audit` (Admin) últimos 200 eventos
 
 ## Registro (seguridad)
 

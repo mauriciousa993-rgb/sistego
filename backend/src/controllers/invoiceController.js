@@ -3,6 +3,7 @@ const { Order } = require("../models/Order");
 const Invoice = require("../models/Invoice");
 const { processElectronicInvoice } = require("../services/electronicInvoiceService");
 const { User } = require("../models/User");
+const { logAction } = require("../services/audit");
 
 function toObjectId(value) {
   try {
@@ -157,6 +158,7 @@ async function emitElectronicInvoice(req, res) {
       await order.save({ session });
     });
 
+    await logAction(req, { action: "invoice.emit", entity: "Invoice", entityId: String(orderId) });
     return res.status(201).json({ invoice: createdInvoice?.[0] || null });
   } catch (err) {
     const status = err.statusCode || 500;

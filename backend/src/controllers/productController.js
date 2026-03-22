@@ -1,6 +1,7 @@
 const XLSX = require("xlsx");
 const Product = require("../models/Product");
 const { uploadImageBuffer, deleteByPublicId } = require("../services/cloudinary");
+const { logAction } = require("../services/audit");
 
 function normalizeHeader(header) {
   return String(header || "")
@@ -108,6 +109,7 @@ async function bulkUploadProducts(req, res) {
     }
 
     const inserted = await Product.insertMany(productsToInsert, { ordered: true });
+    await logAction(req, { action: "product.bulk", entity: "Product", entityId: "", meta: { insertedCount: inserted.length } });
     return res.status(201).json({ insertedCount: inserted.length });
   } catch (err) {
     return res.status(500).json({ message: "Error procesando Excel.", error: err.message });
@@ -150,6 +152,41 @@ async function lowStock(req, res) {
 }
 
 /**
+ * GET /api/products/export.xlsx
+ * Admin: exporta inventario a Excel.
+ */
+async function exportProductsXlsx(_req, res) {
+  try {
+    const items = await Product.find({})
+      .sort({ nombre: 1 })
+      .select("sku nombre proveedor precio stock iva unidadMedida imageUrl")
+      .lean();
+
+    const rows = items.map((p) => ({
+      sku: p.sku,
+      nombre: p.nombre,
+      proveedor: p.proveedor || "",
+      precio: p.precio,
+      stock: p.stock,
+      iva: p.iva,
+      unidadMedida: p.unidadMedida,
+      imageUrl: p.imageUrl || ""
+    }));
+
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(rows);
+    XLSX.utils.book_append_sheet(wb, ws, "Inventario");
+
+    const buffer = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Disposition", 'attachment; filename="inventario.xlsx"');
+    return res.send(buffer);
+  } catch (err) {
+    return res.status(500).json({ message: "No se pudo exportar.", error: err.message });
+  }
+}
+
+/**
  * POST /api/products/:id/image
  * Sube una imagen (multipart/form-data, field: "image") a Cloudinary y la asocia al producto.
  */
@@ -178,6 +215,7 @@ async function uploadProductImage(req, res) {
       await deleteByPublicId(prevPublicId);
     }
 
+    await logAction(req, { action: "product.image", entity: "Product", entityId: product._id });
     return res.json({
       product: {
         _id: product._id,
@@ -195,4 +233,4 @@ async function uploadProductImage(req, res) {
   }
 }
 
-module.exports = { bulkUploadProducts, listProducts, lowStock, uploadProductImage };
+module.exports = { bulkUploadProducts, listProducts, lowStock, exportProductsXlsx, uploadProductImage };

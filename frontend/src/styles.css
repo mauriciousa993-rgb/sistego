@@ -357,6 +357,12 @@ code {
   color: #92400e;
 }
 
+.pill.bad {
+  border-color: rgba(239, 68, 68, 0.28);
+  background: rgba(239, 68, 68, 0.1);
+  color: var(--bad);
+}
+
 .list {
   margin: 10px 0 0;
   padding-left: 18px;

@@ -1,6 +1,7 @@
 const mongoose = require("mongoose");
 const Product = require("../models/Product");
 const { Order } = require("../models/Order");
+const { logAction } = require("../services/audit");
 
 function toObjectId(value) {
   try {
@@ -62,6 +63,7 @@ async function createOrder(req, res) {
       estado: "Pendiente"
     });
 
+    await logAction(req, { action: "order.create", entity: "Order", entityId: order._id, meta: { total, items: items.length } });
     return res.status(201).json({ order });
   } catch (err) {
     return res.status(500).json({ message: "No se pudo crear pedido.", error: err.message });
@@ -118,6 +120,47 @@ async function getOrder(req, res) {
 }
 
 /**
+ * PATCH /api/orders/:id/approve
+ * Admin: mueve pedido Pendiente -> En Bodega
+ */
+async function approveOrder(req, res) {
+  try {
+    const order = await Order.findById(req.params.id);
+    if (!order) return res.status(404).json({ message: "Pedido no encontrado." });
+    if (order.estado !== "Pendiente") {
+      return res.status(409).json({ message: `Estado inválido para aprobar: ${order.estado}` });
+    }
+
+    order.estado = "En Bodega";
+    await order.save();
+    await logAction(req, { action: "order.approve", entity: "Order", entityId: order._id });
+    return res.json({ order: order.toObject() });
+  } catch (err) {
+    return res.status(500).json({ message: "No se pudo aprobar pedido.", error: err.message });
+  }
+}
+
+/**
+ * PATCH /api/orders/:id/cancel
+ * Admin: cancela pedido Pendiente/En Bodega
+ */
+async function cancelOrder(req, res) {
+  try {
+    const order = await Order.findById(req.params.id);
+    if (!order) return res.status(404).json({ message: "Pedido no encontrado." });
+    if (!["Pendiente", "En Bodega"].includes(order.estado)) {
+      return res.status(409).json({ message: `Estado inválido para cancelar: ${order.estado}` });
+    }
+    order.estado = "Cancelado";
+    await order.save();
+    await logAction(req, { action: "order.cancel", entity: "Order", entityId: order._id });
+    return res.json({ order: order.toObject() });
+  } catch (err) {
+    return res.status(500).json({ message: "No se pudo cancelar pedido.", error: err.message });
+  }
+}
+
+/**
  * PATCH /api/orders/:id/dispatch
  *
  * Lógica de inventario (clave):
@@ -143,7 +186,7 @@ async function dispatchOrder(req, res) {
         throw e;
       }
 
-      if (!["Pendiente", "En Bodega"].includes(order.estado)) {
+      if (!["En Bodega"].includes(order.estado)) {
         const e = new Error(`Estado inválido para despacho: ${order.estado}`);
         e.statusCode = 409;
         throw e;
@@ -211,6 +254,7 @@ async function dispatchOrder(req, res) {
       ).lean();
     });
 
+    await logAction(req, { action: "order.dispatch", entity: "Order", entityId: id });
     return res.json({ order: updatedOrder });
   } catch (err) {
     const status = err.statusCode || 500;
@@ -223,4 +267,4 @@ async function dispatchOrder(req, res) {
   }
 }
 
-module.exports = { createOrder, listOrders, getOrder, dispatchOrder };
+module.exports = { createOrder, listOrders, getOrder, approveOrder, cancelOrder, dispatchOrder };

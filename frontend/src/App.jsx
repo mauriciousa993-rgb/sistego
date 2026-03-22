@@ -52,7 +52,7 @@ export default function App() {
     if (!role) return [];
     if (role === "Vendedor") return ["home", "orders", "customers", "invoices"];
     if (role === "Bodega") return ["home", "orders"];
-    return ["home", "reports", "inventory", "invoices", "users"];
+    return ["home", "reports", "inventory", "purchases", "audit", "invoices", "users"];
   }, [role]);
 
   useEffect(() => {
@@ -168,6 +168,8 @@ export default function App() {
               {key === "invoices" ? "Facturas" : null}
               {key === "inventory" ? "Inventario" : null}
               {key === "reports" ? "Reportes" : null}
+              {key === "purchases" ? "Compras" : null}
+              {key === "audit" ? "Auditoría" : null}
               {key === "users" ? "Usuarios" : null}
             </button>
           ))}
@@ -191,6 +193,8 @@ export default function App() {
         {active === "customers" && isAdmin ? <CustomersPanel admin /> : null}
         {active === "invoices" ? <InvoicesPanel role={role} /> : null}
         {active === "inventory" && isAdmin ? <InventoryPanel /> : null}
+        {active === "purchases" && isAdmin ? <PurchasesPanel /> : null}
+        {active === "audit" && isAdmin ? <AuditPanel /> : null}
         {active === "reports" && isAdmin ? <ReportsPanel /> : null}
         {active === "users" && isAdmin ? <UsersPanel /> : null}
       </main>
@@ -334,6 +338,16 @@ function OrdersPanel({ role }) {
     await loadOrders();
   }
 
+  async function approve(orderId) {
+    await api.patch(`/api/orders/${orderId}/approve`);
+    await loadOrders();
+  }
+
+  async function cancel(orderId) {
+    await api.patch(`/api/orders/${orderId}/cancel`);
+    await loadOrders();
+  }
+
   return (
     <Panel
       title="Pedidos"
@@ -431,12 +445,37 @@ function OrdersPanel({ role }) {
               <tr key={o._id}>
                 <td>{o.numeroPedido ?? "—"}</td>
                 <td>
-                  <span className={`pill ${o.estado === "Despachado" || o.estado === "Facturado" ? "ok" : "warn"}`}>{o.estado}</span>
+                  <span
+                    className={`pill ${
+                      o.estado === "Despachado" || o.estado === "Facturado"
+                        ? "ok"
+                        : o.estado === "Cancelado"
+                          ? "bad"
+                          : "warn"
+                    }`}
+                  >
+                    {o.estado}
+                  </span>
                 </td>
                 <td>{formatMoney(o.total)}</td>
                 <td>{Array.isArray(o.items) ? o.items.length : 0}</td>
                 <td>
-                  {role === "Bodega" && (o.estado === "Pendiente" || o.estado === "En Bodega") ? (
+                  {role === "Admin" && o.estado === "Pendiente" ? (
+                    <div className="row">
+                      <button className="btn primary" type="button" onClick={() => approve(o._id)}>
+                        Aprobar
+                      </button>
+                      <button className="btn" type="button" onClick={() => cancel(o._id)}>
+                        Cancelar
+                      </button>
+                    </div>
+                  ) : null}
+                  {role === "Admin" && o.estado === "En Bodega" ? (
+                    <button className="btn" type="button" onClick={() => cancel(o._id)}>
+                      Cancelar
+                    </button>
+                  ) : null}
+                  {role === "Bodega" && o.estado === "En Bodega" ? (
                     <button className="btn primary" type="button" onClick={() => dispatch(o._id)}>
                       Despachar
                     </button>
@@ -495,6 +534,34 @@ function CustomersPanel({ admin }) {
       await load();
     } catch (err) {
       alert(err?.response?.data?.message || err?.message || "No se pudo crear cliente.");
+    }
+  }
+
+  const [pay, setPay] = useState({ customerId: "", amount: 0, note: "", loading: false, error: "", ok: "" });
+  const [payments, setPayments] = useState({ loading: false, items: [], error: "" });
+
+  async function loadPayments(customerId) {
+    try {
+      setPayments({ loading: true, items: [], error: "" });
+      const { data } = await api.get(`/api/customers/${customerId}/payments`);
+      setPayments({ loading: false, items: Array.isArray(data?.items) ? data.items : [], error: "" });
+    } catch (err) {
+      const message = err?.response?.data?.message || err?.message || "No se pudo cargar pagos.";
+      setPayments({ loading: false, items: [], error: message });
+    }
+  }
+
+  async function createPayment(e) {
+    e.preventDefault();
+    if (!pay.customerId) return setPay((s) => ({ ...s, error: "Selecciona un cliente." }));
+    try {
+      setPay((s) => ({ ...s, loading: true, error: "", ok: "" }));
+      await api.post(`/api/customers/${pay.customerId}/payments`, { amount: Number(pay.amount), note: pay.note });
+      setPay({ customerId: "", amount: 0, note: "", loading: false, error: "", ok: "Pago registrado." });
+      await load();
+    } catch (err) {
+      const message = err?.response?.data?.message || err?.message || "No se pudo registrar pago.";
+      setPay((s) => ({ ...s, loading: false, error: message, ok: "" }));
     }
   }
 
@@ -564,6 +631,79 @@ function CustomersPanel({ admin }) {
               </tbody>
             </table>
           </div>
+        </div>
+      </div>
+
+      <div className="grid2" style={{ marginTop: 14 }}>
+        <div className="card">
+          <div className="cardTitle">Registrar pago / abono</div>
+          <form onSubmit={createPayment} className="stack">
+            <select className="input" value={pay.customerId} onChange={(e) => setPay((s) => ({ ...s, customerId: e.target.value }))}>
+              <option value="">Selecciona un cliente…</option>
+              {state.items.map((c) => (
+                <option key={c._id} value={c._id}>
+                  {c.nombre} {c.documento ? `(${c.documento})` : ""}
+                </option>
+              ))}
+            </select>
+            <div className="row">
+              <input
+                className="input"
+                type="number"
+                min="0"
+                placeholder="Valor"
+                value={pay.amount}
+                onChange={(e) => setPay((s) => ({ ...s, amount: Number(e.target.value) }))}
+              />
+              <input
+                className="input"
+                placeholder="Nota (opcional)"
+                value={pay.note}
+                onChange={(e) => setPay((s) => ({ ...s, note: e.target.value }))}
+              />
+            </div>
+            <button className="btn primary" disabled={pay.loading} type="submit">
+              {pay.loading ? "Guardando…" : "Registrar pago"}
+            </button>
+          </form>
+          {pay.error ? <p className="bad">ERROR: {pay.error}</p> : null}
+          {pay.ok ? <p className="ok">{pay.ok}</p> : null}
+          <p className="muted">El saldo del cliente disminuye automáticamente.</p>
+        </div>
+
+        <div className="card">
+          <div className="row" style={{ justifyContent: "space-between" }}>
+            <div className="cardTitle" style={{ margin: 0 }}>
+              Historial de pagos
+            </div>
+            <button className="btn" type="button" onClick={() => (pay.customerId ? loadPayments(pay.customerId) : null)} disabled={!pay.customerId || payments.loading}>
+              {payments.loading ? "Cargando…" : "Ver"}
+            </button>
+          </div>
+          {payments.error ? <p className="bad">ERROR: {payments.error}</p> : null}
+          {!payments.loading && !payments.items.length ? <p className="muted">Selecciona un cliente y pulsa Ver.</p> : null}
+          {payments.items.length ? (
+            <div className="tableWrap" style={{ marginTop: 10 }}>
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>Fecha</th>
+                    <th>Valor</th>
+                    <th>Nota</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {payments.items.map((p) => (
+                    <tr key={p._id}>
+                      <td>{new Date(p.createdAt).toLocaleString()}</td>
+                      <td>{formatMoney(p.amount)}</td>
+                      <td>{p.note || "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : null}
         </div>
       </div>
     </Panel>
@@ -679,6 +819,7 @@ function InventoryPanel() {
   const [catalog, setCatalog] = useState({ loading: false, items: [], error: "" });
   const [imageUpload, setImageUpload] = useState({ productId: "", file: null, loading: false, error: "", ok: "" });
   const [low, setLow] = useState({ loading: false, threshold: 5, items: [], error: "" });
+  const apiBase = import.meta?.env?.VITE_API_URL || "";
 
   async function loadCatalog() {
     try {
@@ -729,9 +870,14 @@ function InventoryPanel() {
       title="Inventario"
       subtitle="Catálogo de productos, stock y fotos."
       right={
-        <button className="btn" type="button" onClick={loadCatalog} disabled={catalog.loading}>
-          {catalog.loading ? "Cargando…" : "Refrescar"}
-        </button>
+        <div className="row">
+          <a className="btn" href={`${apiBase}/api/products/export.xlsx`} target="_blank" rel="noreferrer">
+            Exportar Excel
+          </a>
+          <button className="btn" type="button" onClick={loadCatalog} disabled={catalog.loading}>
+            {catalog.loading ? "Cargando…" : "Refrescar"}
+          </button>
+        </div>
       }
     >
       <div className="grid2" style={{ alignItems: "start" }}>
@@ -825,6 +971,325 @@ function InventoryPanel() {
             </table>
           </div>
         ) : null}
+      </div>
+    </Panel>
+  );
+}
+
+function PurchasesPanel() {
+  const [suggest, setSuggest] = useState({ loading: false, threshold: 5, items: [], error: "" });
+  const [list, setList] = useState({ loading: false, items: [], error: "" });
+  const [draft, setDraft] = useState({ proveedor: "", items: [], creating: false, error: "", ok: "" });
+
+  async function loadSuggest() {
+    try {
+      setSuggest((s) => ({ ...s, loading: true, error: "" }));
+      const { data } = await api.get(`/api/products/low-stock?threshold=${encodeURIComponent(suggest.threshold)}`);
+      setSuggest((s) => ({ ...s, loading: false, items: Array.isArray(data?.items) ? data.items : [], error: "" }));
+    } catch (err) {
+      const message = err?.response?.data?.message || err?.message || "No se pudo cargar sugerencia.";
+      setSuggest((s) => ({ ...s, loading: false, items: [], error: message }));
+    }
+  }
+
+  async function loadPOs() {
+    try {
+      setList((s) => ({ ...s, loading: true, error: "" }));
+      const { data } = await api.get("/api/purchase-orders");
+      setList({ loading: false, items: Array.isArray(data?.items) ? data.items : [], error: "" });
+    } catch (err) {
+      const message = err?.response?.data?.message || err?.message || "No se pudo cargar OC.";
+      setList({ loading: false, items: [], error: message });
+    }
+  }
+
+  useEffect(() => {
+    loadSuggest();
+    loadPOs();
+  }, []);
+
+  const grouped = useMemo(() => {
+    const map = new Map();
+    for (const p of suggest.items) {
+      const prov = p.proveedor || "(sin proveedor)";
+      const arr = map.get(prov) || [];
+      arr.push(p);
+      map.set(prov, arr);
+    }
+    return [...map.entries()].map(([proveedor, items]) => ({ proveedor, items }));
+  }, [suggest.items]);
+
+  function startDraft(proveedor, items) {
+    setDraft({
+      proveedor,
+      items: items.map((p) => ({
+        product: p._id,
+        nombre: p.nombre,
+        sku: p.sku,
+        stock: p.stock,
+        cantidad: Math.max(1, Number(suggest.threshold) * 2 - Number(p.stock || 0)),
+        costoUnit: 0
+      })),
+      creating: false,
+      error: "",
+      ok: ""
+    });
+  }
+
+  async function createPO(e) {
+    e.preventDefault();
+    try {
+      setDraft((s) => ({ ...s, creating: true, error: "", ok: "" }));
+      await api.post("/api/purchase-orders", {
+        proveedor: draft.proveedor,
+        items: draft.items
+          .filter((it) => Number(it.cantidad) > 0)
+          .map((it) => ({ product: it.product, cantidad: Number(it.cantidad), costoUnit: Number(it.costoUnit || 0) }))
+      });
+      setDraft((s) => ({ ...s, creating: false, ok: "Orden de compra creada." }));
+      await loadPOs();
+    } catch (err) {
+      const message = err?.response?.data?.message || err?.message || "No se pudo crear OC.";
+      setDraft((s) => ({ ...s, creating: false, error: message, ok: "" }));
+    }
+  }
+
+  async function receive(poId) {
+    await api.patch(`/api/purchase-orders/${poId}/receive`);
+    await loadPOs();
+    await loadSuggest();
+  }
+
+  return (
+    <Panel
+      title="Compras"
+      subtitle="Crea órdenes de compra por proveedor y recibe para aumentar inventario."
+      right={
+        <button className="btn" type="button" onClick={loadPOs} disabled={list.loading}>
+          {list.loading ? "Cargando…" : "Refrescar"}
+        </button>
+      }
+    >
+      <div className="grid2" style={{ alignItems: "start" }}>
+        <div className="card">
+          <div className="row" style={{ justifyContent: "space-between" }}>
+            <div className="cardTitle" style={{ margin: 0 }}>
+              Sugerencia bajo inventario
+            </div>
+            <div className="row">
+              <input
+                className="input"
+                style={{ maxWidth: 140 }}
+                type="number"
+                min="0"
+                value={suggest.threshold}
+                onChange={(e) => setSuggest((s) => ({ ...s, threshold: Number(e.target.value) }))}
+              />
+              <button className="btn" type="button" onClick={loadSuggest} disabled={suggest.loading}>
+                {suggest.loading ? "Cargando…" : "Actualizar"}
+              </button>
+            </div>
+          </div>
+          {suggest.error ? <p className="bad">ERROR: {suggest.error}</p> : null}
+          {!grouped.length && !suggest.loading ? <p className="muted">Sin productos por debajo del umbral.</p> : null}
+          {grouped.map((g) => (
+            <div key={g.proveedor} className="card" style={{ marginTop: 12, boxShadow: "none" }}>
+              <div className="row" style={{ justifyContent: "space-between" }}>
+                <div className="cardTitle" style={{ margin: 0 }}>
+                  {g.proveedor}
+                </div>
+                <button className="btn primary" type="button" onClick={() => startDraft(g.proveedor, g.items)}>
+                  Crear OC
+                </button>
+              </div>
+              <div className="muted" style={{ marginTop: 6 }}>
+                {g.items.length} producto(s)
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="card">
+          <div className="cardTitle">Órdenes de compra</div>
+          {list.error ? <p className="bad">ERROR: {list.error}</p> : null}
+          <div className="tableWrap" style={{ marginTop: 10 }}>
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Proveedor</th>
+                  <th>Estado</th>
+                  <th>Items</th>
+                  <th style={{ width: 140 }}>Acción</th>
+                </tr>
+              </thead>
+              <tbody>
+                {list.items.map((po) => (
+                  <tr key={po._id}>
+                    <td>{po.proveedor}</td>
+                    <td>
+                      <span className={`pill ${po.estado === "Recibido" ? "ok" : po.estado === "Cancelado" ? "bad" : "warn"}`}>{po.estado}</span>
+                    </td>
+                    <td>{Array.isArray(po.items) ? po.items.length : 0}</td>
+                    <td>
+                      {po.estado === "Pendiente" ? (
+                        <button className="btn primary" type="button" onClick={() => receive(po._id)}>
+                          Recibir
+                        </button>
+                      ) : (
+                        <span className="muted">—</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+                {!list.loading && !list.items.length ? (
+                  <tr>
+                    <td colSpan={4} className="muted">
+                      Sin órdenes de compra.
+                    </td>
+                  </tr>
+                ) : null}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      {draft.proveedor ? (
+        <div className="card" style={{ marginTop: 14 }}>
+          <div className="cardTitle">Nueva OC — {draft.proveedor}</div>
+          <form onSubmit={createPO} className="stack">
+            <div className="tableWrap">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>Producto</th>
+                    <th>Stock</th>
+                    <th>Cantidad</th>
+                    <th>Costo unit</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {draft.items.map((it, idx) => (
+                    <tr key={it.product}>
+                      <td>
+                        {it.nombre} <span className="muted">({it.sku})</span>
+                      </td>
+                      <td>{it.stock}</td>
+                      <td>
+                        <input
+                          className="input"
+                          style={{ maxWidth: 140 }}
+                          type="number"
+                          min="0"
+                          value={it.cantidad}
+                          onChange={(e) =>
+                            setDraft((s) => ({
+                              ...s,
+                              items: s.items.map((x, i) => (i === idx ? { ...x, cantidad: Number(e.target.value) } : x))
+                            }))
+                          }
+                        />
+                      </td>
+                      <td>
+                        <input
+                          className="input"
+                          style={{ maxWidth: 160 }}
+                          type="number"
+                          min="0"
+                          value={it.costoUnit}
+                          onChange={(e) =>
+                            setDraft((s) => ({
+                              ...s,
+                              items: s.items.map((x, i) => (i === idx ? { ...x, costoUnit: Number(e.target.value) } : x))
+                            }))
+                          }
+                        />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="row">
+              <button className="btn primary" disabled={draft.creating} type="submit">
+                {draft.creating ? "Creando…" : "Crear OC"}
+              </button>
+              <button className="btn" type="button" onClick={() => setDraft({ proveedor: "", items: [], creating: false, error: "", ok: "" })}>
+                Cerrar
+              </button>
+            </div>
+            {draft.error ? <p className="bad">ERROR: {draft.error}</p> : null}
+            {draft.ok ? <p className="ok">{draft.ok}</p> : null}
+          </form>
+        </div>
+      ) : null}
+    </Panel>
+  );
+}
+
+function AuditPanel() {
+  const [state, setState] = useState({ loading: false, items: [], error: "" });
+
+  async function load() {
+    try {
+      setState({ loading: true, items: [], error: "" });
+      const { data } = await api.get("/api/audit");
+      setState({ loading: false, items: Array.isArray(data?.items) ? data.items : [], error: "" });
+    } catch (err) {
+      const message = err?.response?.data?.message || err?.message || "No se pudo cargar auditoría.";
+      setState({ loading: false, items: [], error: message });
+    }
+  }
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  return (
+    <Panel
+      title="Auditoría"
+      subtitle="Registro básico de acciones (últimos 200 eventos)."
+      right={
+        <button className="btn" type="button" onClick={load} disabled={state.loading}>
+          {state.loading ? "Cargando…" : "Refrescar"}
+        </button>
+      }
+    >
+      {state.error ? <p className="bad">ERROR: {state.error}</p> : null}
+      <div className="tableWrap">
+        <table className="table">
+          <thead>
+            <tr>
+              <th>Fecha</th>
+              <th>Usuario</th>
+              <th>Acción</th>
+              <th>Entidad</th>
+            </tr>
+          </thead>
+          <tbody>
+            {state.items.map((a) => (
+              <tr key={a._id}>
+                <td>{new Date(a.createdAt).toLocaleString()}</td>
+                <td>
+                  {a.email ? a.email : "—"} <span className="muted">({a.role || "—"})</span>
+                </td>
+                <td>
+                  <code>{a.action}</code>
+                </td>
+                <td>
+                  <code>{a.entity}</code> {a.entityId ? <span className="muted">· {a.entityId}</span> : null}
+                </td>
+              </tr>
+            ))}
+            {!state.loading && !state.items.length ? (
+              <tr>
+                <td colSpan={4} className="muted">
+                  Sin eventos.
+                </td>
+              </tr>
+            ) : null}
+          </tbody>
+        </table>
       </div>
     </Panel>
   );

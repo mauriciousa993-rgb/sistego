@@ -1,6 +1,12 @@
 const express = require("express");
 const multer = require("multer");
-const { bulkUploadProducts, listProducts, lowStock, uploadProductImage } = require("../controllers/productController");
+const {
+  bulkUploadProducts,
+  listProducts,
+  lowStock,
+  exportProductsXlsx,
+  uploadProductImage
+} = require("../controllers/productController");
 const { authenticate, requireRole } = require("../middlewares/auth");
 
 const router = express.Router();
@@ -15,6 +21,9 @@ router.get("/", listProducts);
 
 // Sugerencia compras por bajo inventario (Admin)
 router.get("/low-stock", authenticate, requireRole("Admin"), lowStock);
+
+// Export inventario (Admin)
+router.get("/export.xlsx", authenticate, requireRole("Admin"), exportProductsXlsx);
 
 // Solo Admin puede cargar inventario masivamente.
 router.post("/bulk", authenticate, requireRole("Admin"), upload.single("file"), bulkUploadProducts);

@@ -1,5 +1,6 @@
 const mongoose = require("mongoose");
 const Customer = require("../models/Customer");
+const { logAction } = require("../services/audit");
 
 function toObjectId(value) {
   try {
@@ -51,6 +52,7 @@ async function createCustomer(req, res) {
       saldo: saldo != null ? Number(saldo) : undefined
     });
 
+    await logAction(req, { action: "customer.create", entity: "Customer", entityId: customer._id });
     return res.status(201).json({ customer });
   } catch (err) {
     return res.status(500).json({ message: "No se pudo crear cliente.", error: err.message });
@@ -75,6 +77,7 @@ async function updateCustomer(req, res) {
       if (req.body?.[key] !== undefined) customer[key] = req.body[key];
     }
     await customer.save();
+    await logAction(req, { action: "customer.update", entity: "Customer", entityId: customer._id });
     return res.json({ customer });
   } catch (err) {
     return res.status(500).json({ message: "No se pudo actualizar cliente.", error: err.message });
