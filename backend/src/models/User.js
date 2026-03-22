@@ -1,6 +1,6 @@
 const mongoose = require("mongoose");
 
-const USER_ROLES = ["Vendedor", "Bodega", "Admin"];
+const USER_ROLES = ["Vendedor", "Bodega", "Admin", "Cliente"];
 
 const userSchema = new mongoose.Schema(
   {
@@ -16,4 +16,3 @@ module.exports = {
   User: mongoose.model("User", userSchema),
   USER_ROLES
 };
-

@@ -47,9 +47,17 @@ export default function App() {
   const isBodega = role === "Bodega";
 
   const [active, setActive] = useState("home");
+  const [sideOpen, setSideOpen] = useState(true);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const isDesktop = window.matchMedia?.("(min-width: 980px)")?.matches;
+    setSideOpen(Boolean(isDesktop));
+  }, []);
 
   const nav = useMemo(() => {
     if (!role) return [];
+    if (role === "Cliente") return ["home", "shop", "cart", "orders", "invoices"];
     if (role === "Vendedor") return ["home", "orders", "customers", "invoices"];
     if (role === "Bodega") return ["home", "orders"];
     return ["home", "reports", "inventory", "purchases", "audit", "invoices", "users"];
@@ -142,8 +150,25 @@ export default function App() {
   }
 
   return (
-    <div className="dashPage">
-      <aside className="side">
+    <div className="shell">
+      <header className="topbar">
+        <div className="topLeft">
+          <button className="iconBtn" type="button" onClick={() => setSideOpen((s) => !s)} aria-label="Abrir menú">
+            ☰
+          </button>
+          <div className="topBrand">SISTEGO</div>
+        </div>
+        <div className="topRight">
+          <button className="iconBtn" type="button" onClick={logout} aria-label="Salir">
+            ⎋
+          </button>
+        </div>
+      </header>
+
+      <div className="dashPage">
+        {sideOpen ? <button className="backdrop" type="button" aria-label="Cerrar menú" onClick={() => setSideOpen(false)} /> : null}
+
+        <aside className={`side ${sideOpen ? "open" : ""}`}>
         <div className="sideHeader">
           <div className="brandDot" />
           <div>
@@ -160,12 +185,17 @@ export default function App() {
               key={key}
               className={`navItem ${active === key ? "active" : ""}`}
               type="button"
-              onClick={() => setActive(key)}
+              onClick={() => {
+                setActive(key);
+                if (typeof window !== "undefined" && window.matchMedia?.("(max-width: 979px)")?.matches) setSideOpen(false);
+              }}
             >
               {key === "home" ? "Inicio" : null}
               {key === "orders" ? "Pedidos" : null}
               {key === "customers" ? "Clientes" : null}
               {key === "invoices" ? "Facturas" : null}
+              {key === "shop" ? "Productos" : null}
+              {key === "cart" ? "Carrito" : null}
               {key === "inventory" ? "Inventario" : null}
               {key === "reports" ? "Reportes" : null}
               {key === "purchases" ? "Compras" : null}
@@ -184,11 +214,14 @@ export default function App() {
             {health.loading ? "…" : health.ok ? <span className="ok">OK</span> : <span className="bad">ERROR</span>}
           </div>
         </div>
-      </aside>
+        </aside>
 
-      <main className="main">
-        {active === "home" ? <HomePanel role={role} /> : null}
-        {active === "orders" ? <OrdersPanel role={role} /> : null}
+        <main className="main">
+        {active === "home" ? <HomePanel role={role} go={setActive} /> : null}
+        {active === "orders" && role !== "Cliente" ? <OrdersPanel role={role} userId={auth.user?.id} /> : null}
+        {active === "orders" && role === "Cliente" ? <CustomerOrdersPanel /> : null}
+        {active === "shop" && role === "Cliente" ? <ShopPanel /> : null}
+        {active === "cart" && role === "Cliente" ? <CartPanel /> : null}
         {active === "customers" && isVendor ? <CustomersPanel /> : null}
         {active === "customers" && isAdmin ? <CustomersPanel admin /> : null}
         {active === "invoices" ? <InvoicesPanel role={role} /> : null}
@@ -197,7 +230,8 @@ export default function App() {
         {active === "audit" && isAdmin ? <AuditPanel /> : null}
         {active === "reports" && isAdmin ? <ReportsPanel /> : null}
         {active === "users" && isAdmin ? <UsersPanel /> : null}
-      </main>
+        </main>
+      </div>
     </div>
   );
 }
@@ -217,7 +251,7 @@ function Panel({ title, subtitle, children, right }) {
   );
 }
 
-function HomePanel({ role }) {
+function HomePanel({ role, go }) {
   return (
     <Panel
       title="Dashboard"
@@ -229,54 +263,98 @@ function HomePanel({ role }) {
             : "Revisa ventas, inventario y administra usuarios."
       }
     >
-      <div className="grid2">
-        <div className="card">
-          <div className="cardTitle">Accesos por rol</div>
-          <ul className="list">
-            {role === "Vendedor" ? (
-              <>
-                <li>Pedidos: crear y ver estado</li>
-                <li>Clientes: cartera (saldo / cupo)</li>
-                <li>Facturas: listado + PDF</li>
-              </>
-            ) : null}
-            {role === "Bodega" ? (
-              <>
-                <li>Pedidos: ver pendientes y despachar</li>
-                <li>Inventario: se descuenta al despachar</li>
-              </>
-            ) : null}
-            {role === "Admin" ? (
-              <>
-                <li>Reportes: ventas generales y por vendedor</li>
-                <li>Inventario: catálogo + fotos</li>
-                <li>Usuarios: crear cuentas por rol</li>
-              </>
-            ) : null}
-          </ul>
-        </div>
-
-        <div className="card">
-          <div className="cardTitle">Sugerencias (siguiente paso)</div>
-          <ul className="list">
-            <li>Estados del pedido: “En Bodega” al aprobarlo (flujo Vendedor → Bodega).</li>
-            <li>Cartera real: abonos/pagos por cliente y vencimientos.</li>
-            <li>Pedidos de compra: proveedor, costo, recepción y actualización de stock.</li>
-            <li>Auditoría: logs de acciones por usuario.</li>
-            <li>Exportación: Excel/PDF de inventario, ventas y cartera.</li>
-          </ul>
-        </div>
+      <div className="tileGrid">
+        {role === "Cliente" ? (
+          <>
+            <button className="tile" type="button" onClick={() => go("shop")}>
+              <div className="tileIcon">🛒</div>
+              <div className="tileText">Productos</div>
+            </button>
+            <button className="tile" type="button" onClick={() => go("cart")}>
+              <div className="tileIcon">🧺</div>
+              <div className="tileText">Carrito</div>
+            </button>
+            <button className="tile" type="button" onClick={() => go("orders")}>
+              <div className="tileIcon">📦</div>
+              <div className="tileText">Mis pedidos</div>
+            </button>
+            <button className="tile" type="button" onClick={() => go("invoices")}>
+              <div className="tileIcon">🧾</div>
+              <div className="tileText">Mis facturas</div>
+            </button>
+          </>
+        ) : null}
+        {role === "Vendedor" ? (
+          <>
+            <button className="tile" type="button" onClick={() => go("orders")}>
+              <div className="tileIcon">📝</div>
+              <div className="tileText">Pedidos</div>
+            </button>
+            <button className="tile" type="button" onClick={() => go("customers")}>
+              <div className="tileIcon">📒</div>
+              <div className="tileText">Cartera</div>
+            </button>
+            <button className="tile" type="button" onClick={() => go("invoices")}>
+              <div className="tileIcon">🧾</div>
+              <div className="tileText">Facturas</div>
+            </button>
+          </>
+        ) : null}
+        {role === "Bodega" ? (
+          <>
+            <button className="tile" type="button" onClick={() => go("orders")}>
+              <div className="tileIcon">🏷️</div>
+              <div className="tileText">Pedidos</div>
+            </button>
+          </>
+        ) : null}
+        {role === "Admin" ? (
+          <>
+            <button className="tile" type="button" onClick={() => go("reports")}>
+              <div className="tileIcon">📊</div>
+              <div className="tileText">Ventas</div>
+            </button>
+            <button className="tile" type="button" onClick={() => go("inventory")}>
+              <div className="tileIcon">📦</div>
+              <div className="tileText">Inventario</div>
+            </button>
+            <button className="tile" type="button" onClick={() => go("purchases")}>
+              <div className="tileIcon">🧾</div>
+              <div className="tileText">Compras</div>
+            </button>
+            <button className="tile" type="button" onClick={() => go("audit")}>
+              <div className="tileIcon">🕵️</div>
+              <div className="tileText">Auditoría</div>
+            </button>
+          </>
+        ) : null}
       </div>
     </Panel>
   );
 }
 
-function OrdersPanel({ role }) {
+function OrdersPanel({ role, userId }) {
   const [products, setProducts] = useState({ loading: false, items: [], error: "" });
   const [orders, setOrders] = useState({ loading: false, items: [], error: "" });
   const [draft, setDraft] = useState({ productId: "", cantidad: 1 });
   const [items, setItems] = useState([]);
   const [busy, setBusy] = useState({ creating: false, error: "" });
+
+  const draftKey = role === "Vendedor" && userId ? `draft_order_${userId}` : "";
+
+  useEffect(() => {
+    if (!draftKey) return;
+    const raw = localStorage.getItem(draftKey);
+    if (!raw) return;
+    const saved = safeJsonParse(raw, null);
+    if (saved?.items) setItems(saved.items);
+    if (saved?.draft) setDraft(saved.draft);
+  }, [draftKey]);
+
+  useEffect(() => {
+    if (!draftKey) return;
+    localStorage.setItem(draftKey, JSON.stringify({ items, draft }));
+  }, [draftKey, items, draft]);
 
   async function loadProducts() {
     try {
@@ -324,6 +402,7 @@ function OrdersPanel({ role }) {
       setBusy({ creating: true, error: "" });
       await api.post("/api/orders", { items: items.map((it) => ({ product: it.product, cantidad: it.cantidad })) });
       setItems([]);
+      if (draftKey) localStorage.removeItem(draftKey);
       await loadOrders();
     } catch (err) {
       const message = err?.response?.data?.message || err?.message || "No se pudo crear pedido.";
@@ -1295,6 +1374,241 @@ function AuditPanel() {
   );
 }
 
+function getCartKey() {
+  return "cart_cliente";
+}
+
+function loadCart() {
+  const raw = localStorage.getItem(getCartKey());
+  const data = safeJsonParse(raw || "null", null);
+  return Array.isArray(data) ? data : [];
+}
+
+function saveCart(items) {
+  localStorage.setItem(getCartKey(), JSON.stringify(items));
+}
+
+function ShopPanel() {
+  const [state, setState] = useState({ loading: false, items: [], error: "" });
+  const [cart, setCart] = useState(() => loadCart());
+
+  async function load() {
+    try {
+      setState({ loading: true, items: [], error: "" });
+      const { data } = await api.get("/api/shop/products");
+      setState({ loading: false, items: Array.isArray(data?.items) ? data.items : [], error: "" });
+    } catch (err) {
+      const message = err?.response?.data?.message || err?.message || "No se pudo cargar productos.";
+      setState({ loading: false, items: [], error: message });
+    }
+  }
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  useEffect(() => {
+    saveCart(cart);
+  }, [cart]);
+
+  function addToCart(p) {
+    setCart((prev) => {
+      const existing = prev.find((x) => String(x.product) === String(p._id));
+      if (existing) return prev.map((x) => (String(x.product) === String(p._id) ? { ...x, cantidad: x.cantidad + 1 } : x));
+      return [...prev, { product: p._id, nombre: p.nombre, sku: p.sku, precio: p.precio, iva: p.iva, cantidad: 1 }];
+    });
+  }
+
+  return (
+    <Panel
+      title="Productos disponibles"
+      subtitle="Agrega productos al carrito y envía tu pedido a bodega."
+      right={
+        <button className="btn" type="button" onClick={load} disabled={state.loading}>
+          {state.loading ? "Cargando…" : "Refrescar"}
+        </button>
+      }
+    >
+      {state.error ? <p className="bad">ERROR: {state.error}</p> : null}
+      <div className="catalogGrid">
+        {state.items.map((p) => (
+          <div key={p._id} className="productCard">
+            {p.imageUrl ? <img className="productImg" src={p.imageUrl} alt={p.nombre} /> : <div className="productImg placeholder" />}
+            <div className="productMeta">
+              <div className="productName">{p.nombre}</div>
+              <div className="muted">
+                {formatMoney(p.precio)} · stock <code>{p.stock}</code>
+              </div>
+              <div className="row" style={{ marginTop: 10 }}>
+                <button className="btn primary" type="button" onClick={() => addToCart(p)} disabled={p.stock <= 0}>
+                  Agregar
+                </button>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+      {!state.loading && !state.items.length ? <p className="muted">Sin productos disponibles.</p> : null}
+    </Panel>
+  );
+}
+
+function CartPanel() {
+  const [cart, setCart] = useState(() => loadCart());
+  const [busy, setBusy] = useState({ loading: false, error: "", ok: "" });
+
+  useEffect(() => {
+    saveCart(cart);
+  }, [cart]);
+
+  const total = useMemo(() => {
+    let sum = 0;
+    for (const it of cart) {
+      const line = Number(it.precio || 0) * Number(it.cantidad || 0) * (1 + Number(it.iva || 0) / 100);
+      sum += line;
+    }
+    return Math.round(sum * 100) / 100;
+  }, [cart]);
+
+  async function checkout() {
+    try {
+      setBusy({ loading: true, error: "", ok: "" });
+      await api.post("/api/shop/orders", { items: cart.map((it) => ({ product: it.product, cantidad: it.cantidad })) });
+      setCart([]);
+      setBusy({ loading: false, error: "", ok: "Pedido enviado a bodega." });
+    } catch (err) {
+      const message = err?.response?.data?.message || err?.message || "No se pudo enviar el pedido.";
+      setBusy({ loading: false, error: message, ok: "" });
+    }
+  }
+
+  return (
+    <Panel title="Carrito" subtitle="Revisa cantidades y envía el pedido a bodega.">
+      {!cart.length ? <p className="muted">Tu carrito está vacío.</p> : null}
+      {cart.length ? (
+        <div className="tableWrap">
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Producto</th>
+                <th>Cantidad</th>
+                <th>Precio</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {cart.map((it, idx) => (
+                <tr key={it.product}>
+                  <td>
+                    {it.nombre} <span className="muted">({it.sku})</span>
+                  </td>
+                  <td style={{ width: 160 }}>
+                    <input
+                      className="input"
+                      type="number"
+                      min="1"
+                      value={it.cantidad}
+                      onChange={(e) =>
+                        setCart((s) => s.map((x, i) => (i === idx ? { ...x, cantidad: Number(e.target.value) } : x)))
+                      }
+                    />
+                  </td>
+                  <td>{formatMoney(it.precio)}</td>
+                  <td style={{ width: 120 }}>
+                    <button className="btn" type="button" onClick={() => setCart((s) => s.filter((x) => x.product !== it.product))}>
+                      Quitar
+                    </button>
+                  </td>
+                </tr>
+              ))}
+              <tr>
+                <td colSpan={4} style={{ textAlign: "right", fontWeight: 800 }}>
+                  Total: {formatMoney(total)}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      ) : null}
+
+      <div className="row" style={{ marginTop: 12 }}>
+        <button className="btn primary" type="button" onClick={checkout} disabled={!cart.length || busy.loading}>
+          {busy.loading ? "Enviando…" : "Enviar pedido"}
+        </button>
+        <button className="btn" type="button" onClick={() => setCart([])} disabled={!cart.length || busy.loading}>
+          Vaciar
+        </button>
+      </div>
+      {busy.error ? <p className="bad">ERROR: {busy.error}</p> : null}
+      {busy.ok ? <p className="ok">{busy.ok}</p> : null}
+    </Panel>
+  );
+}
+
+function CustomerOrdersPanel() {
+  const [state, setState] = useState({ loading: false, items: [], error: "" });
+
+  async function load() {
+    try {
+      setState({ loading: true, items: [], error: "" });
+      const { data } = await api.get("/api/shop/orders");
+      setState({ loading: false, items: Array.isArray(data?.items) ? data.items : [], error: "" });
+    } catch (err) {
+      const message = err?.response?.data?.message || err?.message || "No se pudo cargar pedidos.";
+      setState({ loading: false, items: [], error: message });
+    }
+  }
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  return (
+    <Panel
+      title="Mis pedidos"
+      subtitle="Pedidos enviados a bodega y su estado."
+      right={
+        <button className="btn" type="button" onClick={load} disabled={state.loading}>
+          {state.loading ? "Cargando…" : "Refrescar"}
+        </button>
+      }
+    >
+      {state.error ? <p className="bad">ERROR: {state.error}</p> : null}
+      <div className="tableWrap">
+        <table className="table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Estado</th>
+              <th>Total</th>
+              <th>Items</th>
+            </tr>
+          </thead>
+          <tbody>
+            {state.items.map((o) => (
+              <tr key={o._id}>
+                <td>{o.numeroPedido ?? "—"}</td>
+                <td>
+                  <span className={`pill ${o.estado === "Despachado" || o.estado === "Facturado" ? "ok" : "warn"}`}>{o.estado}</span>
+                </td>
+                <td>{formatMoney(o.total)}</td>
+                <td>{Array.isArray(o.items) ? o.items.length : 0}</td>
+              </tr>
+            ))}
+            {!state.loading && !state.items.length ? (
+              <tr>
+                <td colSpan={4} className="muted">
+                  Sin pedidos.
+                </td>
+              </tr>
+            ) : null}
+          </tbody>
+        </table>
+      </div>
+    </Panel>
+  );
+}
+
 function ReportsPanel() {
   const [summary, setSummary] = useState({ loading: false, data: null, error: "" });
   const [byVendor, setByVendor] = useState({ loading: false, items: [], error: "" });
@@ -1407,6 +1721,7 @@ function UsersPanel() {
               <option value="Vendedor">Vendedor</option>
               <option value="Bodega">Bodega</option>
               <option value="Admin">Admin</option>
+              <option value="Cliente">Cliente</option>
             </select>
             <input className="input" placeholder="Nombre (opcional)" value={form.nombre} onChange={(e) => setForm((s) => ({ ...s, nombre: e.target.value }))} />
           </div>

@@ -101,6 +101,7 @@ Roles:
 - `Vendedor`: crear pedidos, ver facturas, ver/crear clientes (cartera simple).
 - `Bodega`: ver pedidos y despachar (descuenta inventario).
 - `Admin`: reportes (ventas generales y por vendedor), inventario + fotos, crear usuarios.
+- `Cliente`: ver productos disponibles, carrito, enviar pedido a bodega, ver sus pedidos/facturas.
 
 ## API agregada
 
@@ -123,6 +124,11 @@ Reportes:
 Inventario:
 - `GET /api/products/low-stock?threshold=5` (Admin) sugerencia de productos con bajo inventario (usa campo opcional `proveedor`).
 - `GET /api/products/export.xlsx` (Admin) export inventario a Excel.
+
+Tienda (Cliente):
+- `GET /api/shop/products` (Cliente) productos disponibles (stock > 0)
+- `POST /api/shop/orders` (Cliente) crea pedido y entra directo a `En Bodega`
+- `GET /api/shop/orders` (Cliente) lista sus pedidos
 
 Compras:
 - `POST /api/purchase-orders` (Admin) crear orden de compra por proveedor

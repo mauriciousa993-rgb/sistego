@@ -5,8 +5,8 @@ const { authenticate, requireRole } = require("../middlewares/auth");
 const router = express.Router();
 
 // Listado / detalle
-router.get("/", authenticate, requireRole("Vendedor", "Admin"), listInvoices);
-router.get("/:id", authenticate, requireRole("Vendedor", "Admin"), getInvoice);
+router.get("/", authenticate, requireRole("Vendedor", "Cliente", "Admin"), listInvoices);
+router.get("/:id", authenticate, requireRole("Vendedor", "Cliente", "Admin"), getInvoice);
 
 // Solo Admin puede emitir FE.
 router.post("/:orderId/emit", authenticate, requireRole("Admin"), emitElectronicInvoice);

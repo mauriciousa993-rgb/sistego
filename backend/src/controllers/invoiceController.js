@@ -36,6 +36,9 @@ async function listInvoices(req, res) {
     if (role === "Vendedor") {
       pipeline.push({ $match: { "order.vendedorId": toObjectId(userId) } });
     }
+    if (role === "Cliente") {
+      pipeline.push({ $match: { "order.customerId": toObjectId(userId) } });
+    }
 
     pipeline.push(
       { $sort: { createdAt: -1 } },
@@ -92,6 +95,7 @@ async function getInvoice(req, res) {
     ];
 
     if (role === "Vendedor") pipeline.push({ $match: { "order.vendedorId": toObjectId(userId) } });
+    if (role === "Cliente") pipeline.push({ $match: { "order.customerId": toObjectId(userId) } });
 
     pipeline.push({ $project: { CUFE: 1, URL_PDF: 1, JSON_DIAN: 1, createdAt: 1, orderId: 1, order: 1 } });
 

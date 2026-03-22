@@ -57,6 +57,7 @@ async function createOrder(req, res) {
 
     const total = computeTotal(normalizedItems, productsById);
     const order = await Order.create({
+      source: "Vendedor",
       vendedorId: toObjectId(userId),
       items: normalizedItems,
       total,
@@ -81,8 +82,12 @@ async function listOrders(req, res) {
     if (!role || !userId) return res.status(401).json({ message: "No autenticado." });
 
     const filter = {};
-    if (role === "Vendedor") filter.vendedorId = toObjectId(userId);
+    if (role === "Vendedor") {
+      filter.source = "Vendedor";
+      filter.vendedorId = toObjectId(userId);
+    }
     if (req.query?.estado) filter.estado = String(req.query.estado);
+    if (req.query?.source && role !== "Vendedor") filter.source = String(req.query.source);
 
     const items = await Order.find(filter)
       .sort({ createdAt: -1 })
@@ -109,7 +114,7 @@ async function getOrder(req, res) {
       .lean();
     if (!order) return res.status(404).json({ message: "Pedido no encontrado." });
 
-    if (role === "Vendedor" && String(order.vendedorId) !== String(userId)) {
+    if (role === "Vendedor" && (order.source !== "Vendedor" || String(order.vendedorId) !== String(userId))) {
       return res.status(403).json({ message: "No autorizado." });
     }
 
