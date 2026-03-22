@@ -41,6 +41,7 @@ export default function App() {
     return { token, user, loading: false, error: "" };
   });
   const [hash, setHash] = useState(() => (typeof window !== "undefined" ? window.location.hash || "" : ""));
+  const pathname = typeof window !== "undefined" ? window.location.pathname || "/" : "/";
 
   const role = auth.user?.role || "";
   const isAdmin = role === "Admin";
@@ -123,9 +124,13 @@ export default function App() {
     setActive("home");
   }
 
+  if (pathname.startsWith("/marketplace")) {
+    return <PublicMarketplace />;
+  }
+
   if (!auth.token) {
     if (hash === "#market") {
-      return <PublicMarketplace onLogin={() => (window.location.hash = "")} />;
+      return <PublicMarketplace />;
     }
     return (
       <div className="authPage">
@@ -158,7 +163,7 @@ export default function App() {
             {health.loading ? "verificando…" : health.ok ? <span className="ok">OK</span> : <span className="bad">ERROR</span>}
           </p>
           <div className="row" style={{ marginTop: 12, justifyContent: "space-between" }}>
-            <button className="btn" type="button" onClick={() => (window.location.hash = "#market")}>
+            <button className="btn" type="button" onClick={() => window.location.assign("/marketplace")}>
               Ver catálogo público
             </button>
           </div>
@@ -2594,11 +2599,13 @@ function PublicMarketplace({ onLogin }) {
         <div className="topLeft">
           <div className="topBrand">Marketplace</div>
         </div>
-        <div className="topRight">
-          <button className="btn" type="button" onClick={onLogin}>
-            Iniciar sesión
-          </button>
-        </div>
+        {onLogin ? (
+          <div className="topRight">
+            <button className="btn" type="button" onClick={onLogin}>
+              Iniciar sesión
+            </button>
+          </div>
+        ) : null}
       </header>
 
       <div className="main" style={{ maxWidth: 1200, margin: "0 auto" }}>
@@ -2640,21 +2647,22 @@ function PublicMarketplace({ onLogin }) {
           </div>
 
           {state.error ? <p className="bad">ERROR: {state.error}</p> : null}
-          <div className="catalogGrid">
+          <div className="catalogGrid marketGrid">
             {filtered.map((p) => (
-              <div key={p._id} className="productCard">
-                {p.imageUrl ? <img className="productImg" src={p.imageUrl} alt={p.nombre} /> : <div className="productImg placeholder" />}
-                <div className="productMeta">
-                  <div className="productName">{p.nombre}</div>
-                  <div className="muted">{p.descripcion || ""}</div>
-                  <div className="muted" style={{ marginTop: 6 }}>
-                    {formatMoney(p.precio)} · stock <code>{p.stock}</code>
-                  </div>
-                  <div className="row" style={{ marginTop: 10 }}>
-                    <button className="btn primary" type="button" onClick={() => add(p)}>
-                      Agregar
-                    </button>
-                  </div>
+              <div key={p._id} className="productCard marketCard">
+                <div className="marketCode">
+                  <code>{p.sku || p.codigo || "—"}</code>
+                </div>
+                {p.imageUrl ? (
+                  <img className="productImg" src={p.imageUrl} alt={p.sku || p.codigo || p.nombre || "Producto"} />
+                ) : (
+                  <div className="productImg placeholder" />
+                )}
+                <div className="marketBottom">
+                  <div className="marketPrice">{formatMoney(p.precio)}</div>
+                  <button className="btn primary marketAddBtn" type="button" onClick={() => add(p)}>
+                    Agregar
+                  </button>
                 </div>
               </div>
             ))}
