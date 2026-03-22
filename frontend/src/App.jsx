@@ -1163,14 +1163,20 @@ function InventoryPanel() {
             </div>
             <input className="input" placeholder="Descripción" value={create.descripcion} onChange={(e) => setCreate((s) => ({ ...s, descripcion: e.target.value }))} />
             <div className="grid2">
-              <select className="input" value={create.categoria} onChange={(e) => setCreate((s) => ({ ...s, categoria: e.target.value }))}>
-                <option value="">Categoría…</option>
-                {meta.categories.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))}
-              </select>
+              <div>
+                <input
+                  className="input"
+                  list="product_categories"
+                  placeholder="Categoría… (puedes crear una nueva)"
+                  value={create.categoria}
+                  onChange={(e) => setCreate((s) => ({ ...s, categoria: e.target.value }))}
+                />
+                <datalist id="product_categories">
+                  {meta.categories.map((c) => (
+                    <option key={c} value={c} />
+                  ))}
+                </datalist>
+              </div>
               <input className="input" placeholder="SubCategoría" value={create.subCategoria} onChange={(e) => setCreate((s) => ({ ...s, subCategoria: e.target.value }))} />
             </div>
             <div className="grid2">
