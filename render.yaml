@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: sistego-api
+    runtime: node
+    rootDir: backend
+    buildCommand: npm ci
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: MONGO_URI
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: JWT_EXPIRES_IN
+        value: 8h
+      - key: INVOICE_PROVIDER
+        value: mock
+      - key: PT_DRY_RUN
+        value: "true"
+      - key: DIAN_ENV
+        value: HABILITACION
