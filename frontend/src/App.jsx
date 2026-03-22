@@ -10,6 +10,7 @@ export default function App() {
   const [health, setHealth] = useState({ loading: true, ok: false, error: "" });
   const [token, setToken] = useState(getToken());
   const [auth, setAuth] = useState({ loading: false, error: "", user: null });
+  const [catalog, setCatalog] = useState({ loading: false, items: [], error: "" });
   const [registerForm, setRegisterForm] = useState({
     email: "",
     password: "",
@@ -19,8 +20,10 @@ export default function App() {
   const [loginForm, setLoginForm] = useState({ email: "", password: "" });
   const [orderId, setOrderId] = useState("");
   const [lastDispatch, setLastDispatch] = useState(null);
+  const [imageUpload, setImageUpload] = useState({ productId: "", file: null, loading: false, error: "", ok: "" });
 
   const authHeaderPreview = useMemo(() => (token ? `Bearer ${token.slice(0, 18)}…` : "(sin token)"), [token]);
+  const isAdmin = auth?.user?.role === "Admin";
 
   useEffect(() => {
     let cancelled = false;
@@ -39,12 +42,32 @@ export default function App() {
     };
   }, []);
 
+  async function loadCatalog() {
+    try {
+      setCatalog((s) => ({ ...s, loading: true, error: "" }));
+      const { data } = await api.get("/api/products");
+      setCatalog({ loading: false, items: Array.isArray(data?.items) ? data.items : [], error: "" });
+    } catch (err) {
+      const message = err?.response?.data?.message || err?.message || "No se pudo cargar el catálogo.";
+      setCatalog({ loading: false, items: [], error: message });
+    }
+  }
+
+  useEffect(() => {
+    loadCatalog();
+  }, []);
+
   function persistToken(next) {
     const value = String(next || "");
     if (value) localStorage.setItem("token", value);
     else localStorage.removeItem("token");
     setToken(value);
   }
+
+  useEffect(() => {
+    if (!auth?.user) return;
+    setImageUpload((s) => ({ ...s, productId: s.productId || "" }));
+  }, [auth?.user]);
 
   async function onRegister(e) {
     e.preventDefault();
@@ -69,6 +92,24 @@ export default function App() {
     } catch (err) {
       const message = err?.response?.data?.message || err?.message || "No se pudo iniciar sesión.";
       setAuth({ loading: false, error: message, user: null });
+    }
+  }
+
+  async function onUploadProductImage(e) {
+    e.preventDefault();
+    if (!imageUpload.productId) return setImageUpload((s) => ({ ...s, error: "Selecciona un producto." }));
+    if (!imageUpload.file) return setImageUpload((s) => ({ ...s, error: "Selecciona una imagen." }));
+
+    try {
+      setImageUpload((s) => ({ ...s, loading: true, error: "", ok: "" }));
+      const form = new FormData();
+      form.append("image", imageUpload.file);
+      await api.post(`/api/products/${imageUpload.productId}/image`, form);
+      setImageUpload((s) => ({ ...s, loading: false, ok: "Imagen subida.", file: null }));
+      await loadCatalog();
+    } catch (err) {
+      const message = err?.response?.data?.message || err?.message || "No se pudo subir la imagen.";
+      setImageUpload((s) => ({ ...s, loading: false, error: message, ok: "" }));
     }
   }
 
@@ -200,6 +241,70 @@ export default function App() {
           {lastDispatch ? (
             <pre className="pre">{JSON.stringify(lastDispatch, null, 2)}</pre>
           ) : null}
+        </div>
+
+        <div className="card">
+          <div className="row" style={{ justifyContent: "space-between" }}>
+            <h2 className="subtitle" style={{ margin: 0 }}>
+              Catálogo
+            </h2>
+            <button className="btn" type="button" onClick={loadCatalog} disabled={catalog.loading}>
+              {catalog.loading ? "Cargando…" : "Refrescar"}
+            </button>
+          </div>
+          {catalog.error ? <p className="bad">ERROR: {catalog.error}</p> : null}
+          {!catalog.loading && !catalog.items.length ? <p className="muted">Sin productos.</p> : null}
+          <div className="catalogGrid" style={{ marginTop: 12 }}>
+            {catalog.items.map((p) => (
+              <div key={p._id} className="productCard">
+                {p.imageUrl ? <img className="productImg" src={p.imageUrl} alt={p.nombre} /> : <div className="productImg placeholder" />}
+                <div className="productMeta">
+                  <div className="productName">{p.nombre}</div>
+                  <div className="muted">
+                    SKU: <code>{p.sku}</code>
+                  </div>
+                  <div className="muted">
+                    Precio: <code>{p.precio}</code> · Stock: <code>{p.stock}</code>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="card">
+          <h2 className="subtitle">Foto de producto (Cloudinary)</h2>
+          <p className="muted">
+            Requiere token con rol <code>Admin</code>. Sube una imagen al producto seleccionado.
+          </p>
+          {!isAdmin ? <p className="muted">Inicia sesión como <code>Admin</code> para habilitar esta sección.</p> : null}
+          <form onSubmit={onUploadProductImage} className="stack" style={{ opacity: isAdmin ? 1 : 0.6 }}>
+            <select
+              className="input"
+              disabled={!isAdmin || imageUpload.loading}
+              value={imageUpload.productId}
+              onChange={(e) => setImageUpload((s) => ({ ...s, productId: e.target.value }))}
+            >
+              <option value="">Selecciona un producto…</option>
+              {catalog.items.map((p) => (
+                <option key={p._id} value={p._id}>
+                  {p.nombre} ({p.sku})
+                </option>
+              ))}
+            </select>
+            <input
+              className="input"
+              disabled={!isAdmin || imageUpload.loading}
+              type="file"
+              accept="image/*"
+              onChange={(e) => setImageUpload((s) => ({ ...s, file: e.target.files?.[0] || null }))}
+            />
+            <button className="btn primary" disabled={!isAdmin || imageUpload.loading} type="submit">
+              {imageUpload.loading ? "Subiendo…" : "Subir imagen"}
+            </button>
+          </form>
+          {imageUpload.error ? <p className="bad">ERROR: {imageUpload.error}</p> : null}
+          {imageUpload.ok ? <p className="ok">{imageUpload.ok}</p> : null}
         </div>
       </section>
     </div>

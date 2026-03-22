@@ -1,5 +1,6 @@
 const XLSX = require("xlsx");
 const Product = require("../models/Product");
+const { uploadImageBuffer, deleteByPublicId } = require("../services/cloudinary");
 
 function normalizeHeader(header) {
   return String(header || "")
@@ -106,5 +107,66 @@ async function bulkUploadProducts(req, res) {
   }
 }
 
-module.exports = { bulkUploadProducts };
+/**
+ * GET /api/products
+ * Catálogo simple (público).
+ */
+async function listProducts(_req, res) {
+  try {
+    const items = await Product.find({})
+      .sort({ createdAt: -1 })
+      .select("sku nombre precio stock iva unidadMedida imageUrl")
+      .lean();
+    return res.json({ items });
+  } catch (err) {
+    return res.status(500).json({ message: "No se pudo cargar el catálogo.", error: err.message });
+  }
+}
 
+/**
+ * POST /api/products/:id/image
+ * Sube una imagen (multipart/form-data, field: "image") a Cloudinary y la asocia al producto.
+ */
+async function uploadProductImage(req, res) {
+  try {
+    if (!req.file?.buffer) {
+      return res.status(400).json({ message: "Imagen requerida (field: image)." });
+    }
+    if (req.file.mimetype && !String(req.file.mimetype).startsWith("image/")) {
+      return res.status(415).json({ message: "Solo se permiten imágenes." });
+    }
+
+    const product = await Product.findById(req.params.id);
+    if (!product) return res.status(404).json({ message: "Producto no encontrado." });
+
+    const publicId = `product-${product._id.toString()}`;
+
+    const result = await uploadImageBuffer({ buffer: req.file.buffer, publicId });
+
+    const prevPublicId = product.imagePublicId;
+    product.imageUrl = result.secure_url || result.url || "";
+    product.imagePublicId = result.public_id || publicId;
+    await product.save();
+
+    if (prevPublicId && prevPublicId !== product.imagePublicId) {
+      await deleteByPublicId(prevPublicId);
+    }
+
+    return res.json({
+      product: {
+        _id: product._id,
+        sku: product.sku,
+        nombre: product.nombre,
+        precio: product.precio,
+        stock: product.stock,
+        iva: product.iva,
+        unidadMedida: product.unidadMedida,
+        imageUrl: product.imageUrl
+      }
+    });
+  } catch (err) {
+    return res.status(500).json({ message: "No se pudo subir la imagen.", error: err.message });
+  }
+}
+
+module.exports = { bulkUploadProducts, listProducts, uploadProductImage };

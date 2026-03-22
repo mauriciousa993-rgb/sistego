@@ -8,10 +8,13 @@ const productSchema = new mongoose.Schema(
     stock: { type: Number, required: true, min: 0 },
     // IVA en porcentaje (por ejemplo: 19 para 19%)
     iva: { type: Number, required: true, min: 0, max: 100 },
-    unidadMedida: { type: String, required: true, trim: true }
+    unidadMedida: { type: String, required: true, trim: true },
+
+    // Imagen del producto (Cloudinary)
+    imageUrl: { type: String, default: "" },
+    imagePublicId: { type: String, default: "" }
   },
   { timestamps: true }
 );
 
 module.exports = mongoose.model("Product", productSchema);
-

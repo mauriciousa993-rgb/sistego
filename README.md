@@ -80,3 +80,15 @@ En Vercel, importa el repo y configura:
 - **Environment Variable**: `VITE_API_URL` = `https://<tu-servicio>.onrender.com`
 
 Con eso el frontend llamará al backend en Render tanto para `/health` como para `/api/*`.
+
+### Cloudinary (fotos de productos)
+
+Backend expone:
+- `GET /api/products` → catálogo público (incluye `imageUrl`)
+- `POST /api/products/:id/image` → subir foto (requiere JWT con rol `Admin`, multipart field `image`)
+
+Configura en el backend (Render o `backend/.env` en local):
+- `CLOUDINARY_CLOUD_NAME`
+- `CLOUDINARY_API_KEY`
+- `CLOUDINARY_API_SECRET`
+- `CLOUDINARY_FOLDER` (opcional, default: `sistego/products`)
