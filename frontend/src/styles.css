@@ -472,6 +472,12 @@ code {
   gap: 10px;
 }
 
+.marketStock {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
 .marketPrice {
   font-weight: 800;
   font-size: 14px;
@@ -480,6 +486,10 @@ code {
 
 .marketAddBtn {
   padding: 8px 10px;
+}
+
+.marketCartItem {
+  padding: 12px;
 }
 
 .productMeta {

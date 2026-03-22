@@ -2472,10 +2472,14 @@ function savePublicCart(items) {
 }
 
 function PublicMarketplace({ onLogin }) {
-  const [meta, setMeta] = useState({ loading: false, categories: [], subCategories: [], error: "" });
-  const [filters, setFilters] = useState({ categoria: "", subCategoria: "", q: "" });
   const [state, setState] = useState({ loading: false, items: [], error: "" });
   const [cart, setCart] = useState(() => loadPublicCart());
+  const [page, setPage] = useState(() => {
+    const p = typeof window !== "undefined" ? window.location.pathname || "/marketplace" : "/marketplace";
+    if (p.endsWith("/checkout")) return "checkout";
+    if (p.endsWith("/cart")) return "cart";
+    return "catalog";
+  });
   const [checkout, setCheckout] = useState({
     nombre: "",
     documento: "",
@@ -2494,21 +2498,6 @@ function PublicMarketplace({ onLogin }) {
 
   useEffect(() => savePublicCart(cart), [cart]);
 
-  async function loadMeta() {
-    try {
-      setMeta((s) => ({ ...s, loading: true, error: "" }));
-      const { data } = await api.get("/api/marketplace/meta");
-      setMeta({
-        loading: false,
-        categories: Array.isArray(data?.categories) ? data.categories : [],
-        subCategories: Array.isArray(data?.subCategories) ? data.subCategories : [],
-        error: ""
-      });
-    } catch (err) {
-      setMeta({ loading: false, categories: [], subCategories: [], error: err?.message || "No se pudo cargar meta." });
-    }
-  }
-
   async function loadProducts() {
     try {
       setState({ loading: true, items: [], error: "" });
@@ -2521,7 +2510,6 @@ function PublicMarketplace({ onLogin }) {
   }
 
   useEffect(() => {
-    loadMeta();
     loadProducts();
   }, []);
 
@@ -2533,19 +2521,39 @@ function PublicMarketplace({ onLogin }) {
     });
   }
 
-  const filtered = useMemo(() => {
-    const q = String(filters.q || "").toLowerCase().trim();
-    return state.items.filter((p) => {
-      const okCat = !filters.categoria || String(p.categoria || "") === String(filters.categoria);
-      const okSub = !filters.subCategoria || String(p.subCategoria || "") === String(filters.subCategoria);
-      const okQ =
-        !q ||
-        String(p.nombre || "").toLowerCase().includes(q) ||
-        String(p.descripcion || "").toLowerCase().includes(q) ||
-        String(p.sku || "").toLowerCase().includes(q);
-      return okCat && okSub && okQ;
+  function updateQty(productId, delta) {
+    setCart((prev) => {
+      const next = prev
+        .map((x) => (String(x.product) === String(productId) ? { ...x, cantidad: Number(x.cantidad || 0) + Number(delta || 0) } : x))
+        .filter((x) => Number(x.cantidad || 0) > 0);
+      return next;
     });
-  }, [state.items, filters]);
+  }
+
+  function removeItem(productId) {
+    setCart((prev) => prev.filter((x) => String(x.product) !== String(productId)));
+  }
+
+  function navigate(nextPage) {
+    if (typeof window === "undefined") return;
+    const nextPath = nextPage === "catalog" ? "/marketplace" : `/marketplace/${nextPage}`;
+    window.history.pushState({}, "", nextPath);
+    setPage(nextPage);
+  }
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    function onPop() {
+      const p = window.location.pathname || "/marketplace";
+      if (p.endsWith("/checkout")) return setPage("checkout");
+      if (p.endsWith("/cart")) return setPage("cart");
+      return setPage("catalog");
+    }
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
+
+  const available = useMemo(() => state.items.filter((p) => Number(p.stock || 0) > 0), [state.items]);
 
   const total = useMemo(() => {
     let sum = 0;
@@ -2587,6 +2595,7 @@ function PublicMarketplace({ onLogin }) {
         ok: `Pedido creado. Número: ${data?.order?.numeroPedido || "—"}`,
         error: ""
       }));
+      navigate("catalog");
     } catch (err) {
       const message = err?.response?.data?.message || err?.message || "No se pudo crear pedido.";
       setCheckout((s) => ({ ...s, loading: false, error: message, ok: "" }));
@@ -2609,127 +2618,191 @@ function PublicMarketplace({ onLogin }) {
       </header>
 
       <div className="main" style={{ maxWidth: 1200, margin: "0 auto" }}>
-        <Panel
-          title="Catálogo público"
-          subtitle="Explora productos disponibles. Para pedir: completa datos, elige envío/recogida y opcionalmente adjunta comprobante de pago."
-          right={
-            <button className="btn" type="button" onClick={loadProducts} disabled={state.loading}>
-              {state.loading ? "Cargando…" : "Refrescar"}
-            </button>
-          }
-        >
-          <div className="card" style={{ marginBottom: 14 }}>
-            <div className="grid2">
-              <input className="input" placeholder="Buscar..." value={filters.q} onChange={(e) => setFilters((s) => ({ ...s, q: e.target.value }))} />
-              <select className="input" value={filters.categoria} onChange={(e) => setFilters((s) => ({ ...s, categoria: e.target.value, subCategoria: "" }))}>
-                <option value="">Categoría…</option>
-                {meta.categories.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="grid2" style={{ marginTop: 10 }}>
-              <select className="input" value={filters.subCategoria} onChange={(e) => setFilters((s) => ({ ...s, subCategoria: e.target.value }))}>
-                <option value="">SubCategoría…</option>
-                {meta.subCategories.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))}
-              </select>
-              <div className="row" style={{ justifyContent: "space-between" }}>
-                <div className="muted">Carrito: <strong>{cart.length}</strong> item(s)</div>
-                <div className="muted">Total: <strong>{formatMoney(total)}</strong></div>
+        {page === "catalog" ? (
+          <Panel
+            title="Productos disponibles"
+            subtitle="Selecciona productos y agrégalos al carrito."
+            right={
+              <div className="row">
+                <button className="btn" type="button" onClick={() => navigate("cart")}>
+                  Ver carrito <span className="muted">({cart.length})</span>
+                </button>
+                <button className="btn" type="button" onClick={loadProducts} disabled={state.loading}>
+                  {state.loading ? "Cargando…" : "Refrescar"}
+                </button>
               </div>
-            </div>
-          </div>
-
-          {state.error ? <p className="bad">ERROR: {state.error}</p> : null}
-          <div className="catalogGrid marketGrid">
-            {filtered.map((p) => (
-              <div key={p._id} className="productCard marketCard">
-                <div className="marketCode">
-                  <code>{p.sku || p.codigo || "—"}</code>
+            }
+          >
+            {state.error ? <p className="bad">ERROR: {state.error}</p> : null}
+            <div className="catalogGrid marketGrid">
+              {available.map((p) => (
+                <div key={p._id} className="productCard marketCard">
+                  <div className="marketCode">
+                    <code>{p.sku || p.codigo || "—"}</code>
+                  </div>
+                  {p.imageUrl ? (
+                    <img className="productImg" src={p.imageUrl} alt={p.sku || p.codigo || p.nombre || "Producto"} />
+                  ) : (
+                    <div className="productImg placeholder" />
+                  )}
+                  <div className="marketBottom">
+                    <div>
+                      <div className="marketPrice">{formatMoney(p.precio)}</div>
+                      <div className="marketStock">Stock: <strong>{Number(p.stock || 0)}</strong></div>
+                    </div>
+                    <button className="btn primary marketAddBtn" type="button" onClick={() => add(p)}>
+                      Agregar
+                    </button>
+                  </div>
                 </div>
-                {p.imageUrl ? (
-                  <img className="productImg" src={p.imageUrl} alt={p.sku || p.codigo || p.nombre || "Producto"} />
-                ) : (
-                  <div className="productImg placeholder" />
-                )}
-                <div className="marketBottom">
-                  <div className="marketPrice">{formatMoney(p.precio)}</div>
-                  <button className="btn primary marketAddBtn" type="button" onClick={() => add(p)}>
-                    Agregar
-                  </button>
+              ))}
+            </div>
+          </Panel>
+        ) : null}
+
+        {page === "cart" ? (
+          <Panel
+            title="Carrito"
+            subtitle="Revisa cantidades y continúa al formulario."
+            right={
+              <div className="row">
+                <button className="btn" type="button" onClick={() => navigate("catalog")}>
+                  Seguir comprando
+                </button>
+                <button className="btn primary" type="button" onClick={() => navigate("checkout")} disabled={!cart.length}>
+                  Finalizar
+                </button>
+              </div>
+            }
+          >
+            {!cart.length ? <p className="muted">Tu carrito está vacío.</p> : null}
+            {cart.map((it) => (
+              <div key={it.product} className="card marketCartItem">
+                <div className="row" style={{ justifyContent: "space-between" }}>
+                  <div>
+                    <div className="muted">Código</div>
+                    <div>
+                      <code>{it.sku || "—"}</code>
+                    </div>
+                  </div>
+                  <div style={{ textAlign: "right" }}>
+                    <div className="muted">Precio</div>
+                    <div style={{ fontWeight: 800 }}>{formatMoney(it.precio)}</div>
+                  </div>
+                </div>
+                <div className="row" style={{ marginTop: 10, justifyContent: "space-between" }}>
+                  <div className="row">
+                    <button className="btn" type="button" onClick={() => updateQty(it.product, -1)}>
+                      -
+                    </button>
+                    <div className="muted" style={{ minWidth: 36, textAlign: "center" }}>
+                      <strong>{it.cantidad}</strong>
+                    </div>
+                    <button className="btn" type="button" onClick={() => updateQty(it.product, 1)}>
+                      +
+                    </button>
+                  </div>
+                  <div className="row">
+                    <button className="btn" type="button" onClick={() => removeItem(it.product)}>
+                      Quitar
+                    </button>
+                  </div>
                 </div>
               </div>
             ))}
-          </div>
+            <div className="card" style={{ marginTop: 12 }}>
+              <div className="row" style={{ justifyContent: "space-between" }}>
+                <div className="muted">Total</div>
+                <div style={{ fontWeight: 900 }}>{formatMoney(total)}</div>
+              </div>
+              <div className="row" style={{ marginTop: 12 }}>
+                <button className="btn" type="button" onClick={() => setCart([])} disabled={!cart.length}>
+                  Vaciar carrito
+                </button>
+              </div>
+            </div>
+          </Panel>
+        ) : null}
 
-          <div className="card" style={{ marginTop: 14 }}>
-            <div className="cardTitle">Finalizar pedido</div>
-            <div className="grid2">
-              <input className="input" placeholder="Nombre" value={checkout.nombre} onChange={(e) => setCheckout((s) => ({ ...s, nombre: e.target.value }))} />
-              <input className="input" placeholder="Documento (opcional)" value={checkout.documento} onChange={(e) => setCheckout((s) => ({ ...s, documento: e.target.value }))} />
-            </div>
-            <div className="grid2" style={{ marginTop: 10 }}>
-              <input className="input" placeholder="Teléfono" value={checkout.telefono} onChange={(e) => setCheckout((s) => ({ ...s, telefono: e.target.value }))} />
-              <input className="input" placeholder="Email" value={checkout.email} onChange={(e) => setCheckout((s) => ({ ...s, email: e.target.value }))} />
-            </div>
-            <div style={{ marginTop: 10 }}>
-              <input className="input" placeholder="Dirección (básica)" value={checkout.direccion} onChange={(e) => setCheckout((s) => ({ ...s, direccion: e.target.value }))} />
-            </div>
-            <div className="grid2" style={{ marginTop: 10 }}>
-              <select className="input" value={checkout.deliveryMethod} onChange={(e) => setCheckout((s) => ({ ...s, deliveryMethod: e.target.value }))}>
-                <option value="RecogeEnBodega">Recoge en bodega</option>
-                <option value="Domicilio">Envío a domicilio</option>
-              </select>
-              <input
-                className="input"
-                placeholder="Dirección de envío (si es domicilio)"
-                value={checkout.deliveryAddress}
-                onChange={(e) => setCheckout((s) => ({ ...s, deliveryAddress: e.target.value }))}
-                disabled={checkout.deliveryMethod !== "Domicilio"}
-              />
-            </div>
-
-            <div className="row" style={{ marginTop: 10, justifyContent: "space-between" }}>
-              <label className="muted" style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <input type="checkbox" checked={checkout.wantsInvoice} onChange={(e) => setCheckout((s) => ({ ...s, wantsInvoice: e.target.checked }))} />
-                Requiere factura electrónica (subir RUT)
-              </label>
-              <div className="muted">Adjunta comprobante de pago (opcional)</div>
-            </div>
-            <div className="grid2" style={{ marginTop: 10 }}>
-              <input
-                className="input"
-                type="file"
-                accept=".pdf,image/*"
-                onChange={(e) => setCheckout((s) => ({ ...s, rutFile: e.target.files?.[0] || null }))}
-                disabled={!checkout.wantsInvoice}
-              />
-              <input
-                className="input"
-                type="file"
-                accept=".pdf,image/*"
-                onChange={(e) => setCheckout((s) => ({ ...s, paymentFile: e.target.files?.[0] || null }))}
-              />
+        {page === "checkout" ? (
+          <Panel
+            title="Finalizar pedido"
+            subtitle="Completa la información para enviar el pedido a bodega."
+            right={
+              <div className="row">
+                <button className="btn" type="button" onClick={() => navigate("cart")}>
+                  Volver al carrito
+                </button>
+              </div>
+            }
+          >
+            {!cart.length ? <p className="bad">Tu carrito está vacío. Vuelve al catálogo.</p> : null}
+            <div className="card" style={{ marginBottom: 12 }}>
+              <div className="row" style={{ justifyContent: "space-between" }}>
+                <div className="muted">Total</div>
+                <div style={{ fontWeight: 900 }}>{formatMoney(total)}</div>
+              </div>
             </div>
 
-            <div className="row" style={{ marginTop: 12 }}>
-              <button className="btn primary" type="button" onClick={placeOrder} disabled={checkout.loading}>
-                {checkout.loading ? "Enviando…" : "Enviar pedido"}
-              </button>
-              <button className="btn" type="button" onClick={() => setCart([])} disabled={!cart.length || checkout.loading}>
-                Vaciar carrito
-              </button>
+            <div className="card">
+              <div className="grid2">
+                <input className="input" placeholder="Nombre" value={checkout.nombre} onChange={(e) => setCheckout((s) => ({ ...s, nombre: e.target.value }))} />
+                <input className="input" placeholder="Documento (opcional)" value={checkout.documento} onChange={(e) => setCheckout((s) => ({ ...s, documento: e.target.value }))} />
+              </div>
+              <div className="grid2" style={{ marginTop: 10 }}>
+                <input className="input" placeholder="Teléfono" value={checkout.telefono} onChange={(e) => setCheckout((s) => ({ ...s, telefono: e.target.value }))} />
+                <input className="input" placeholder="Email" value={checkout.email} onChange={(e) => setCheckout((s) => ({ ...s, email: e.target.value }))} />
+              </div>
+              <div style={{ marginTop: 10 }}>
+                <input className="input" placeholder="Dirección (básica)" value={checkout.direccion} onChange={(e) => setCheckout((s) => ({ ...s, direccion: e.target.value }))} />
+              </div>
+              <div className="grid2" style={{ marginTop: 10 }}>
+                <select className="input" value={checkout.deliveryMethod} onChange={(e) => setCheckout((s) => ({ ...s, deliveryMethod: e.target.value }))}>
+                  <option value="RecogeEnBodega">Recoge en bodega</option>
+                  <option value="Domicilio">Envío a domicilio</option>
+                </select>
+                <input
+                  className="input"
+                  placeholder="Dirección de envío (si es domicilio)"
+                  value={checkout.deliveryAddress}
+                  onChange={(e) => setCheckout((s) => ({ ...s, deliveryAddress: e.target.value }))}
+                  disabled={checkout.deliveryMethod !== "Domicilio"}
+                />
+              </div>
+
+              <div className="row" style={{ marginTop: 10, justifyContent: "space-between" }}>
+                <label className="muted" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <input type="checkbox" checked={checkout.wantsInvoice} onChange={(e) => setCheckout((s) => ({ ...s, wantsInvoice: e.target.checked }))} />
+                  Requiere factura electrónica (subir RUT)
+                </label>
+                <div className="muted">Adjunta comprobante de pago (opcional)</div>
+              </div>
+              <div className="grid2" style={{ marginTop: 10 }}>
+                <input
+                  className="input"
+                  type="file"
+                  accept=".pdf,image/*"
+                  onChange={(e) => setCheckout((s) => ({ ...s, rutFile: e.target.files?.[0] || null }))}
+                  disabled={!checkout.wantsInvoice}
+                />
+                <input
+                  className="input"
+                  type="file"
+                  accept=".pdf,image/*"
+                  onChange={(e) => setCheckout((s) => ({ ...s, paymentFile: e.target.files?.[0] || null }))}
+                />
+              </div>
+
+              <div className="row" style={{ marginTop: 12 }}>
+                <button className="btn primary" type="button" onClick={placeOrder} disabled={checkout.loading || !cart.length}>
+                  {checkout.loading ? "Enviando…" : "Enviar pedido"}
+                </button>
+              </div>
+              {checkout.error ? <p className="bad">ERROR: {checkout.error}</p> : null}
+              {checkout.ok ? <p className="ok">{checkout.ok}</p> : null}
             </div>
-            {checkout.error ? <p className="bad">ERROR: {checkout.error}</p> : null}
-            {checkout.ok ? <p className="ok">{checkout.ok}</p> : null}
-          </div>
-        </Panel>
+          </Panel>
+        ) : null}
       </div>
     </div>
   );
