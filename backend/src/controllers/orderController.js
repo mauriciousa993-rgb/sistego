@@ -2,6 +2,7 @@ const mongoose = require("mongoose");
 const Product = require("../models/Product");
 const { Order } = require("../models/Order");
 const { logAction } = require("../services/audit");
+const Customer = require("../models/Customer");
 
 function toObjectId(value) {
   try {
@@ -34,6 +35,9 @@ async function createOrder(req, res) {
     const userId = req.user?.sub;
     if (!userId) return res.status(401).json({ message: "No autenticado." });
 
+    const customerId = req.body?.customerId ? toObjectId(req.body.customerId) : null;
+    if (req.body?.customerId && !customerId) return res.status(400).json({ message: "customerId inválido." });
+
     const items = Array.isArray(req.body?.items) ? req.body.items : [];
     if (!items.length) return res.status(400).json({ message: "items es requerido." });
 
@@ -55,16 +59,31 @@ async function createOrder(req, res) {
       return res.status(400).json({ message: "Uno o más productos no existen." });
     }
 
+    let customerRef = null;
+    if (customerId) {
+      customerRef = await Customer.findById(customerId).lean();
+      if (!customerRef) return res.status(400).json({ message: "Cliente no existe." });
+      if (String(customerRef.vendedorId) !== String(userId)) {
+        return res.status(403).json({ message: "No autorizado para usar este cliente." });
+      }
+    }
+
     const total = computeTotal(normalizedItems, productsById);
     const order = await Order.create({
       source: "Vendedor",
       vendedorId: toObjectId(userId),
+      customerRefId: customerRef ? customerId : undefined,
       items: normalizedItems,
       total,
       estado: "Pendiente"
     });
 
-    await logAction(req, { action: "order.create", entity: "Order", entityId: order._id, meta: { total, items: items.length } });
+    await logAction(req, {
+      action: "order.create",
+      entity: "Order",
+      entityId: order._id,
+      meta: { total, items: items.length, customerRefId: customerRef ? String(customerId) : "" }
+    });
     return res.status(201).json({ order });
   } catch (err) {
     return res.status(500).json({ message: "No se pudo crear pedido.", error: err.message });
@@ -93,6 +112,7 @@ async function listOrders(req, res) {
       .sort({ createdAt: -1 })
       .limit(200)
       .populate({ path: "items.product", select: "sku nombre precio iva unidadMedida imageUrl" })
+      .populate({ path: "customerRefId", select: "nombre documento saldo cupoCredito" })
       .lean();
     return res.json({ items });
   } catch (err) {
@@ -111,6 +131,7 @@ async function getOrder(req, res) {
 
     const order = await Order.findById(req.params.id)
       .populate({ path: "items.product", select: "sku nombre precio iva unidadMedida imageUrl stock" })
+      .populate({ path: "customerRefId", select: "nombre documento saldo cupoCredito" })
       .lean();
     if (!order) return res.status(404).json({ message: "Pedido no encontrado." });
 

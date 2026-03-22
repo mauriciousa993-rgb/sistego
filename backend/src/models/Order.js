@@ -17,7 +17,10 @@ const orderSchema = new mongoose.Schema(
     numeroPedido: { type: Number, unique: true, index: true },
     source: { type: String, enum: ORDER_SOURCES, default: "Vendedor", index: true },
     vendedorId: { type: mongoose.Schema.Types.ObjectId, index: true },
+    // Cliente final (rol Cliente / User)
     customerId: { type: mongoose.Schema.Types.ObjectId, index: true },
+    // Cliente comercial (cartera) asociado a un vendedor (Customer)
+    customerRefId: { type: mongoose.Schema.Types.ObjectId, ref: "Customer", index: true },
     items: { type: [orderItemSchema], required: true },
     total: { type: Number, required: true, min: 0 },
     estado: { type: String, enum: ORDER_STATUSES, default: "Pendiente", index: true }

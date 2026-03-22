@@ -341,8 +341,9 @@ function HomePanel({ role, go }) {
 function OrdersPanel({ role, userId }) {
   const [products, setProducts] = useState({ loading: false, items: [], error: "" });
   const [meta, setMeta] = useState({ loading: false, categories: [], subCategories: [], barcodes: [], error: "" });
+  const [customers, setCustomers] = useState({ loading: false, items: [], error: "" });
   const [orders, setOrders] = useState({ loading: false, items: [], error: "" });
-  const [draft, setDraft] = useState({ productId: "", cantidad: 1 });
+  const [draft, setDraft] = useState({ productId: "", cantidad: 1, customerId: "" });
   const [items, setItems] = useState([]);
   const [busy, setBusy] = useState({ creating: false, error: "" });
   const [filters, setFilters] = useState({
@@ -409,9 +410,22 @@ function OrdersPanel({ role, userId }) {
     }
   }
 
+  async function loadCustomers() {
+    if (role !== "Vendedor") return;
+    try {
+      setCustomers((s) => ({ ...s, loading: true, error: "" }));
+      const { data } = await api.get("/api/customers");
+      setCustomers({ loading: false, items: Array.isArray(data?.items) ? data.items : [], error: "" });
+    } catch (err) {
+      const message = err?.response?.data?.message || err?.message || "No se pudo cargar clientes.";
+      setCustomers({ loading: false, items: [], error: message });
+    }
+  }
+
   useEffect(() => {
     loadProducts();
     loadMeta();
+    loadCustomers();
     loadOrders();
   }, []);
 
@@ -430,9 +444,16 @@ function OrdersPanel({ role, userId }) {
   async function createOrder(e) {
     e.preventDefault();
     if (!items.length) return;
+    if (role === "Vendedor" && !draft.customerId) {
+      setBusy({ creating: false, error: "Selecciona un cliente para el pedido." });
+      return;
+    }
     try {
       setBusy({ creating: true, error: "" });
-      await api.post("/api/orders", { items: items.map((it) => ({ product: it.product, cantidad: it.cantidad })) });
+      await api.post("/api/orders", {
+        customerId: draft.customerId,
+        items: items.map((it) => ({ product: it.product, cantidad: it.cantidad }))
+      });
       setItems([]);
       if (draftKey) localStorage.removeItem(draftKey);
       await loadOrders();
@@ -479,6 +500,19 @@ function OrdersPanel({ role, userId }) {
         <div className="card" style={{ marginBottom: 14 }}>
           <div className="cardTitle">Nuevo pedido</div>
           <form onSubmit={createOrder} className="stack">
+            <select
+              className="input"
+              value={draft.customerId}
+              onChange={(e) => setDraft((s) => ({ ...s, customerId: e.target.value }))}
+            >
+              <option value="">Selecciona cliente…</option>
+              {customers.items.map((c) => (
+                <option key={c._id} value={c._id}>
+                  {c.nombre} {c.documento ? `· ${c.documento}` : ""}
+                </option>
+              ))}
+            </select>
+            {customers.error ? <p className="bad">ERROR: {customers.error}</p> : null}
             <div className="grid2">
               <input
                 className="input"
