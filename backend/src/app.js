@@ -6,6 +6,8 @@ const productRoutes = require("./routes/productRoutes");
 const orderRoutes = require("./routes/orderRoutes");
 const invoiceRoutes = require("./routes/invoiceRoutes");
 const authRoutes = require("./routes/authRoutes");
+const customerRoutes = require("./routes/customerRoutes");
+const reportRoutes = require("./routes/reportRoutes");
 
 function createApp() {
   const app = express();
@@ -18,8 +20,10 @@ function createApp() {
 
   app.use("/api/auth", authRoutes);
   app.use("/api/products", productRoutes);
+  app.use("/api/customers", customerRoutes);
   app.use("/api/orders", orderRoutes);
   app.use("/api/invoices", invoiceRoutes);
+  app.use("/api/reports", reportRoutes);
 
   // Error handler básico
   // eslint-disable-next-line no-unused-vars

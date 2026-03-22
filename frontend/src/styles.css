@@ -1,12 +1,16 @@
 :root {
   color-scheme: light;
-  --bg: #0b1220;
-  --card: #121a2b;
-  --text: #eaf0ff;
-  --muted: rgba(234, 240, 255, 0.75);
-  --ok: #34d399;
-  --bad: #fb7185;
-  --border: rgba(234, 240, 255, 0.12);
+  --bg: #f6f8fc;
+  --card: #ffffff;
+  --text: #0f172a;
+  --muted: rgba(15, 23, 42, 0.7);
+  --ok: #16a34a;
+  --warn: #f59e0b;
+  --bad: #ef4444;
+  --border: rgba(15, 23, 42, 0.12);
+  --shadow: 0 10px 30px rgba(2, 6, 23, 0.06);
+  --primary: #2563eb;
+  --primarySoft: rgba(37, 99, 235, 0.12);
 }
 
 html,
@@ -15,8 +19,7 @@ body {
   padding: 0;
   font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji",
     "Segoe UI Emoji";
-  background: radial-gradient(1000px 600px at 30% 0%, rgba(56, 189, 248, 0.18), transparent 55%),
-    radial-gradient(900px 550px at 80% 20%, rgba(244, 114, 182, 0.14), transparent 60%), var(--bg);
+  background: linear-gradient(180deg, #ffffff, var(--bg));
   color: var(--text);
 }
 
@@ -24,36 +27,163 @@ code {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
 }
 
-.page {
-  max-width: 1100px;
-  padding: 28px 16px 56px;
-  margin: 0 auto;
-}
-
-.grid {
+.authPage {
+  min-height: 100vh;
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-  gap: 16px;
-  margin-top: 16px;
+  place-items: center;
+  padding: 32px 16px;
 }
 
-.card {
-  background: rgba(18, 26, 43, 0.92);
+.authCard {
+  width: min(520px, 100%);
+  background: var(--card);
   border: 1px solid var(--border);
-  border-radius: 14px;
-  padding: 16px;
-  backdrop-filter: blur(8px);
+  border-radius: 16px;
+  box-shadow: var(--shadow);
+  padding: 18px;
 }
 
-.title {
-  margin: 0 0 6px;
-  font-size: 18px;
+.authBrand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.dashPage {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: 260px 1fr;
+}
+
+.side {
+  background: rgba(255, 255, 255, 0.85);
+  border-right: 1px solid var(--border);
+  backdrop-filter: blur(10px);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.sideHeader {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.brandDot {
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  background: radial-gradient(24px 24px at 30% 25%, rgba(37, 99, 235, 0.55), transparent 60%),
+    radial-gradient(26px 26px at 70% 30%, rgba(16, 185, 129, 0.45), transparent 60%), rgba(37, 99, 235, 0.12);
+  border: 1px solid rgba(37, 99, 235, 0.25);
+}
+
+.brandTitle {
+  font-weight: 700;
   letter-spacing: 0.2px;
 }
 
-.subtitle {
-  margin: 0 0 10px;
-  font-size: 15px;
+.brandSub {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.nav {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.navItem {
+  text-align: left;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text);
+  padding: 10px 10px;
+  border-radius: 12px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.navItem:hover {
+  background: rgba(2, 6, 23, 0.03);
+  border-color: rgba(15, 23, 42, 0.06);
+}
+
+.navItem.active {
+  background: var(--primarySoft);
+  border-color: rgba(37, 99, 235, 0.25);
+}
+
+.sideFooter {
+  margin-top: auto;
+}
+
+.main {
+  padding: 22px 20px 56px;
+}
+
+.panel {
+  max-width: 1200px;
+}
+
+.panelHeader {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.panelBody {
+  display: block;
+}
+
+.panelRight {
+  display: flex;
+  gap: 10px;
+}
+
+.h1 {
+  margin: 0;
+  font-size: 22px;
+}
+
+.grid2 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+@media (max-width: 980px) {
+  .dashPage {
+    grid-template-columns: 1fr;
+  }
+  .side {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+  .grid2 {
+    grid-template-columns: 1fr;
+  }
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 14px;
+  box-shadow: var(--shadow);
+}
+
+.cardTitle {
+  font-weight: 700;
+  margin-bottom: 10px;
 }
 
 .muted {
@@ -78,35 +208,38 @@ code {
 .input {
   width: 100%;
   box-sizing: border-box;
-  border-radius: 10px;
+  border-radius: 12px;
   padding: 10px 12px;
   border: 1px solid var(--border);
-  background: rgba(7, 11, 20, 0.65);
+  background: rgba(255, 255, 255, 0.9);
   color: var(--text);
   outline: none;
 }
 
 .input:focus {
-  border-color: rgba(56, 189, 248, 0.55);
+  border-color: rgba(37, 99, 235, 0.55);
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.12);
 }
 
 .btn {
   border: 1px solid var(--border);
-  background: rgba(7, 11, 20, 0.4);
+  background: rgba(255, 255, 255, 0.9);
   color: var(--text);
   padding: 10px 12px;
-  border-radius: 10px;
+  border-radius: 12px;
   cursor: pointer;
   white-space: nowrap;
+  font-weight: 700;
 }
 
 .btn:hover {
-  border-color: rgba(234, 240, 255, 0.22);
+  border-color: rgba(15, 23, 42, 0.18);
 }
 
 .btn.primary {
-  background: rgba(56, 189, 248, 0.18);
-  border-color: rgba(56, 189, 248, 0.4);
+  background: var(--primary);
+  border-color: rgba(37, 99, 235, 0.55);
+  color: white;
 }
 
 .btn:disabled {
@@ -118,6 +251,10 @@ code {
   color: var(--ok);
 }
 
+.warn {
+  color: var(--warn);
+}
+
 .bad {
   color: var(--bad);
 }
@@ -125,9 +262,9 @@ code {
 .pre {
   margin: 12px 0 0;
   padding: 12px;
-  border-radius: 12px;
+  border-radius: 14px;
   border: 1px solid var(--border);
-  background: rgba(7, 11, 20, 0.65);
+  background: rgba(255, 255, 255, 0.9);
   overflow: auto;
   font-size: 12px;
   line-height: 1.35;
@@ -141,8 +278,8 @@ code {
 
 .productCard {
   border: 1px solid var(--border);
-  background: rgba(7, 11, 20, 0.35);
-  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.9);
+  border-radius: 14px;
   overflow: hidden;
 }
 
@@ -151,13 +288,13 @@ code {
   height: 160px;
   object-fit: cover;
   display: block;
-  background: rgba(18, 26, 43, 0.75);
+  background: rgba(15, 23, 42, 0.06);
 }
 
 .productImg.placeholder {
-  background: radial-gradient(600px 220px at 30% 10%, rgba(56, 189, 248, 0.22), transparent 55%),
-    radial-gradient(500px 220px at 70% 0%, rgba(244, 114, 182, 0.18), transparent 60%),
-    rgba(7, 11, 20, 0.55);
+  background: radial-gradient(600px 220px at 30% 10%, rgba(37, 99, 235, 0.18), transparent 55%),
+    radial-gradient(500px 220px at 70% 0%, rgba(16, 185, 129, 0.14), transparent 60%),
+    rgba(2, 6, 23, 0.02);
 }
 
 .productMeta {
@@ -167,4 +304,100 @@ code {
 .productName {
   font-weight: 600;
   margin-bottom: 6px;
+}
+
+.tableWrap {
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 620px;
+  background: var(--card);
+}
+
+.table th,
+.table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+  text-align: left;
+  font-size: 13px;
+}
+
+.table th {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: rgba(15, 23, 42, 0.6);
+  background: rgba(2, 6, 23, 0.02);
+}
+
+.pill {
+  display: inline-flex;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  font-weight: 700;
+  font-size: 12px;
+  background: rgba(2, 6, 23, 0.02);
+}
+
+.pill.ok {
+  border-color: rgba(22, 163, 74, 0.25);
+  background: rgba(22, 163, 74, 0.08);
+  color: var(--ok);
+}
+
+.pill.warn {
+  border-color: rgba(245, 158, 11, 0.3);
+  background: rgba(245, 158, 11, 0.12);
+  color: #92400e;
+}
+
+.list {
+  margin: 10px 0 0;
+  padding-left: 18px;
+  color: rgba(15, 23, 42, 0.86);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.link {
+  color: var(--primary);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.link:hover {
+  text-decoration: underline;
+}
+
+.kpis {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.kpi {
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 14px;
+  padding: 12px;
+  background: rgba(2, 6, 23, 0.02);
+}
+
+.kpiLabel {
+  color: rgba(15, 23, 42, 0.7);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 6px;
+}
+
+.kpiValue {
+  font-weight: 800;
+  font-size: 18px;
 }

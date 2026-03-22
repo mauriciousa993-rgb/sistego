@@ -1,29 +1,59 @@
 import { useEffect, useMemo, useState } from "react";
-import DispatchOrderButton from "./components/DispatchOrderButton.jsx";
 import { api } from "./lib/api.js";
 
-function getToken() {
-  return localStorage.getItem("token") || "";
+function safeJsonParse(value, fallback) {
+  try {
+    return JSON.parse(value);
+  } catch {
+    return fallback;
+  }
+}
+
+function decodeJwt(token) {
+  try {
+    const payload = token.split(".")[1];
+    if (!payload) return null;
+    const normalized = payload.replace(/-/g, "+").replace(/_/g, "/");
+    const json = atob(normalized);
+    return safeJsonParse(json, null);
+  } catch {
+    return null;
+  }
+}
+
+function getStoredAuth() {
+  const token = localStorage.getItem("token") || "";
+  const storedUser = safeJsonParse(localStorage.getItem("user") || "null", null);
+  const payload = token ? decodeJwt(token) : null;
+  const user = storedUser || (payload ? { id: payload.sub, email: payload.email, role: payload.role } : null);
+  return { token, user };
+}
+
+function formatMoney(value) {
+  const num = Number(value || 0);
+  return num.toLocaleString("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 });
 }
 
 export default function App() {
   const [health, setHealth] = useState({ loading: true, ok: false, error: "" });
-  const [token, setToken] = useState(getToken());
-  const [auth, setAuth] = useState({ loading: false, error: "", user: null });
-  const [catalog, setCatalog] = useState({ loading: false, items: [], error: "" });
-  const [registerForm, setRegisterForm] = useState({
-    email: "",
-    password: "",
-    role: "Admin",
-    nombre: ""
+  const [auth, setAuth] = useState(() => {
+    const { token, user } = getStoredAuth();
+    return { token, user, loading: false, error: "" };
   });
-  const [loginForm, setLoginForm] = useState({ email: "", password: "" });
-  const [orderId, setOrderId] = useState("");
-  const [lastDispatch, setLastDispatch] = useState(null);
-  const [imageUpload, setImageUpload] = useState({ productId: "", file: null, loading: false, error: "", ok: "" });
 
-  const authHeaderPreview = useMemo(() => (token ? `Bearer ${token.slice(0, 18)}…` : "(sin token)"), [token]);
-  const isAdmin = auth?.user?.role === "Admin";
+  const role = auth.user?.role || "";
+  const isAdmin = role === "Admin";
+  const isVendor = role === "Vendedor";
+  const isBodega = role === "Bodega";
+
+  const [active, setActive] = useState("home");
+
+  const nav = useMemo(() => {
+    if (!role) return [];
+    if (role === "Vendedor") return ["home", "orders", "customers", "invoices"];
+    if (role === "Bodega") return ["home", "orders"];
+    return ["home", "reports", "inventory", "invoices", "users"];
+  }, [role]);
 
   useEffect(() => {
     let cancelled = false;
@@ -42,13 +72,620 @@ export default function App() {
     };
   }, []);
 
+  function persistAuth({ token, user }) {
+    const nextToken = String(token || "");
+    if (nextToken) localStorage.setItem("token", nextToken);
+    else localStorage.removeItem("token");
+
+    if (user) localStorage.setItem("user", JSON.stringify(user));
+    else localStorage.removeItem("user");
+
+    setAuth((s) => ({ ...s, token: nextToken, user: user || null }));
+  }
+
+  async function onLogin(e) {
+    e.preventDefault();
+    try {
+      setAuth((s) => ({ ...s, loading: true, error: "" }));
+      const form = new FormData(e.currentTarget);
+      const email = String(form.get("email") || "");
+      const password = String(form.get("password") || "");
+      const { data } = await api.post("/api/auth/login", { email, password });
+      persistAuth({ token: data?.token || "", user: data?.user || null });
+      setActive("home");
+      setAuth((s) => ({ ...s, loading: false, error: "" }));
+    } catch (err) {
+      const message = err?.response?.data?.message || err?.message || "No se pudo iniciar sesión.";
+      setAuth((s) => ({ ...s, loading: false, error: message }));
+    }
+  }
+
+  function logout() {
+    persistAuth({ token: "", user: null });
+    setActive("home");
+  }
+
+  if (!auth.token) {
+    return (
+      <div className="authPage">
+        <div className="authCard">
+          <div className="authBrand">
+            <div className="brandDot" />
+            <div>
+              <div className="brandTitle">SISTEGO</div>
+              <div className="brandSub">Acceso al sistema</div>
+            </div>
+          </div>
+
+          <form onSubmit={onLogin} className="stack">
+            <input className="input" name="email" placeholder="Email" autoComplete="email" />
+            <input
+              className="input"
+              name="password"
+              type="password"
+              placeholder="Contraseña"
+              autoComplete="current-password"
+            />
+            <button className="btn primary" disabled={auth.loading} type="submit">
+              {auth.loading ? "Entrando…" : "Entrar"}
+            </button>
+          </form>
+
+          {auth.error ? <p className="bad">ERROR: {auth.error}</p> : null}
+          <p className="muted" style={{ marginTop: 12 }}>
+            API: <code>{import.meta?.env?.VITE_API_URL || "(mismo origen)"}</code> · Health:{" "}
+            {health.loading ? "verificando…" : health.ok ? <span className="ok">OK</span> : <span className="bad">ERROR</span>}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="dashPage">
+      <aside className="side">
+        <div className="sideHeader">
+          <div className="brandDot" />
+          <div>
+            <div className="brandTitle">SISTEGO</div>
+            <div className="brandSub">
+              {auth.user?.email} · <strong>{role}</strong>
+            </div>
+          </div>
+        </div>
+
+        <nav className="nav">
+          {nav.map((key) => (
+            <button
+              key={key}
+              className={`navItem ${active === key ? "active" : ""}`}
+              type="button"
+              onClick={() => setActive(key)}
+            >
+              {key === "home" ? "Inicio" : null}
+              {key === "orders" ? "Pedidos" : null}
+              {key === "customers" ? "Clientes" : null}
+              {key === "invoices" ? "Facturas" : null}
+              {key === "inventory" ? "Inventario" : null}
+              {key === "reports" ? "Reportes" : null}
+              {key === "users" ? "Usuarios" : null}
+            </button>
+          ))}
+        </nav>
+
+        <div className="sideFooter">
+          <button className="btn" type="button" onClick={logout}>
+            Salir
+          </button>
+          <div className="muted" style={{ marginTop: 8 }}>
+            Health:{" "}
+            {health.loading ? "…" : health.ok ? <span className="ok">OK</span> : <span className="bad">ERROR</span>}
+          </div>
+        </div>
+      </aside>
+
+      <main className="main">
+        {active === "home" ? <HomePanel role={role} /> : null}
+        {active === "orders" ? <OrdersPanel role={role} /> : null}
+        {active === "customers" && isVendor ? <CustomersPanel /> : null}
+        {active === "customers" && isAdmin ? <CustomersPanel admin /> : null}
+        {active === "invoices" ? <InvoicesPanel role={role} /> : null}
+        {active === "inventory" && isAdmin ? <InventoryPanel /> : null}
+        {active === "reports" && isAdmin ? <ReportsPanel /> : null}
+        {active === "users" && isAdmin ? <UsersPanel /> : null}
+      </main>
+    </div>
+  );
+}
+
+function Panel({ title, subtitle, children, right }) {
+  return (
+    <section className="panel">
+      <header className="panelHeader">
+        <div>
+          <h1 className="h1">{title}</h1>
+          {subtitle ? <p className="muted">{subtitle}</p> : null}
+        </div>
+        {right ? <div className="panelRight">{right}</div> : null}
+      </header>
+      <div className="panelBody">{children}</div>
+    </section>
+  );
+}
+
+function HomePanel({ role }) {
+  return (
+    <Panel
+      title="Dashboard"
+      subtitle={
+        role === "Vendedor"
+          ? "Crea pedidos, consulta facturas y administra tu cartera de clientes."
+          : role === "Bodega"
+            ? "Prepara y despacha pedidos."
+            : "Revisa ventas, inventario y administra usuarios."
+      }
+    >
+      <div className="grid2">
+        <div className="card">
+          <div className="cardTitle">Accesos por rol</div>
+          <ul className="list">
+            {role === "Vendedor" ? (
+              <>
+                <li>Pedidos: crear y ver estado</li>
+                <li>Clientes: cartera (saldo / cupo)</li>
+                <li>Facturas: listado + PDF</li>
+              </>
+            ) : null}
+            {role === "Bodega" ? (
+              <>
+                <li>Pedidos: ver pendientes y despachar</li>
+                <li>Inventario: se descuenta al despachar</li>
+              </>
+            ) : null}
+            {role === "Admin" ? (
+              <>
+                <li>Reportes: ventas generales y por vendedor</li>
+                <li>Inventario: catálogo + fotos</li>
+                <li>Usuarios: crear cuentas por rol</li>
+              </>
+            ) : null}
+          </ul>
+        </div>
+
+        <div className="card">
+          <div className="cardTitle">Sugerencias (siguiente paso)</div>
+          <ul className="list">
+            <li>Estados del pedido: “En Bodega” al aprobarlo (flujo Vendedor → Bodega).</li>
+            <li>Cartera real: abonos/pagos por cliente y vencimientos.</li>
+            <li>Pedidos de compra: proveedor, costo, recepción y actualización de stock.</li>
+            <li>Auditoría: logs de acciones por usuario.</li>
+            <li>Exportación: Excel/PDF de inventario, ventas y cartera.</li>
+          </ul>
+        </div>
+      </div>
+    </Panel>
+  );
+}
+
+function OrdersPanel({ role }) {
+  const [products, setProducts] = useState({ loading: false, items: [], error: "" });
+  const [orders, setOrders] = useState({ loading: false, items: [], error: "" });
+  const [draft, setDraft] = useState({ productId: "", cantidad: 1 });
+  const [items, setItems] = useState([]);
+  const [busy, setBusy] = useState({ creating: false, error: "" });
+
+  async function loadProducts() {
+    try {
+      setProducts((s) => ({ ...s, loading: true, error: "" }));
+      const { data } = await api.get("/api/products");
+      setProducts({ loading: false, items: Array.isArray(data?.items) ? data.items : [], error: "" });
+    } catch (err) {
+      const message = err?.response?.data?.message || err?.message || "No se pudo cargar productos.";
+      setProducts({ loading: false, items: [], error: message });
+    }
+  }
+
+  async function loadOrders() {
+    try {
+      setOrders((s) => ({ ...s, loading: true, error: "" }));
+      const { data } = await api.get("/api/orders");
+      setOrders({ loading: false, items: Array.isArray(data?.items) ? data.items : [], error: "" });
+    } catch (err) {
+      const message = err?.response?.data?.message || err?.message || "No se pudo cargar pedidos.";
+      setOrders({ loading: false, items: [], error: message });
+    }
+  }
+
+  useEffect(() => {
+    loadProducts();
+    loadOrders();
+  }, []);
+
+  function addItem() {
+    const product = products.items.find((p) => String(p._id) === String(draft.productId));
+    const cantidad = Number(draft.cantidad);
+    if (!product || !Number.isFinite(cantidad) || cantidad < 1) return;
+    setItems((prev) => {
+      const existing = prev.find((x) => String(x.product) === String(product._id));
+      if (existing) return prev.map((x) => (String(x.product) === String(product._id) ? { ...x, cantidad: x.cantidad + cantidad } : x));
+      return [...prev, { product: product._id, sku: product.sku, nombre: product.nombre, cantidad }];
+    });
+    setDraft({ productId: "", cantidad: 1 });
+  }
+
+  async function createOrder(e) {
+    e.preventDefault();
+    if (!items.length) return;
+    try {
+      setBusy({ creating: true, error: "" });
+      await api.post("/api/orders", { items: items.map((it) => ({ product: it.product, cantidad: it.cantidad })) });
+      setItems([]);
+      await loadOrders();
+    } catch (err) {
+      const message = err?.response?.data?.message || err?.message || "No se pudo crear pedido.";
+      setBusy({ creating: false, error: message });
+      return;
+    }
+    setBusy({ creating: false, error: "" });
+  }
+
+  async function dispatch(orderId) {
+    await api.patch(`/api/orders/${orderId}/dispatch`);
+    await loadOrders();
+  }
+
+  return (
+    <Panel
+      title="Pedidos"
+      subtitle={
+        role === "Vendedor"
+          ? "Crea pedidos y consulta su estado."
+          : role === "Bodega"
+            ? "Despacha pedidos y descuenta inventario."
+            : "Consulta pedidos."
+      }
+      right={
+        <button className="btn" type="button" onClick={loadOrders} disabled={orders.loading}>
+          {orders.loading ? "Cargando…" : "Refrescar"}
+        </button>
+      }
+    >
+      {role === "Vendedor" ? (
+        <div className="card" style={{ marginBottom: 14 }}>
+          <div className="cardTitle">Nuevo pedido</div>
+          <form onSubmit={createOrder} className="stack">
+            <div className="row">
+              <select className="input" value={draft.productId} onChange={(e) => setDraft((s) => ({ ...s, productId: e.target.value }))}>
+                <option value="">Selecciona producto…</option>
+                {products.items.map((p) => (
+                  <option key={p._id} value={p._id}>
+                    {p.nombre} (SKU {p.sku}) · {formatMoney(p.precio)} · stock {p.stock}
+                  </option>
+                ))}
+              </select>
+              <input
+                className="input"
+                style={{ maxWidth: 140 }}
+                type="number"
+                min="1"
+                value={draft.cantidad}
+                onChange={(e) => setDraft((s) => ({ ...s, cantidad: Number(e.target.value) }))}
+              />
+              <button className="btn" type="button" onClick={addItem}>
+                Agregar
+              </button>
+            </div>
+
+            {!items.length ? <p className="muted">Agrega items para crear el pedido.</p> : null}
+            {items.length ? (
+              <div className="tableWrap">
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th>Producto</th>
+                      <th style={{ width: 120 }}>Cantidad</th>
+                      <th style={{ width: 110 }} />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {items.map((it) => (
+                      <tr key={it.product}>
+                        <td>
+                          {it.nombre} <span className="muted">({it.sku})</span>
+                        </td>
+                        <td>{it.cantidad}</td>
+                        <td>
+                          <button className="btn" type="button" onClick={() => setItems((p) => p.filter((x) => x.product !== it.product))}>
+                            Quitar
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : null}
+
+            <button className="btn primary" disabled={busy.creating || !items.length} type="submit">
+              {busy.creating ? "Creando…" : "Crear pedido"}
+            </button>
+            {busy.error ? <p className="bad">ERROR: {busy.error}</p> : null}
+          </form>
+        </div>
+      ) : null}
+
+      {orders.error ? <p className="bad">ERROR: {orders.error}</p> : null}
+      <div className="tableWrap">
+        <table className="table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Estado</th>
+              <th>Total</th>
+              <th>Items</th>
+              <th style={{ width: 160 }}>Acción</th>
+            </tr>
+          </thead>
+          <tbody>
+            {orders.items.map((o) => (
+              <tr key={o._id}>
+                <td>{o.numeroPedido ?? "—"}</td>
+                <td>
+                  <span className={`pill ${o.estado === "Despachado" || o.estado === "Facturado" ? "ok" : "warn"}`}>{o.estado}</span>
+                </td>
+                <td>{formatMoney(o.total)}</td>
+                <td>{Array.isArray(o.items) ? o.items.length : 0}</td>
+                <td>
+                  {role === "Bodega" && (o.estado === "Pendiente" || o.estado === "En Bodega") ? (
+                    <button className="btn primary" type="button" onClick={() => dispatch(o._id)}>
+                      Despachar
+                    </button>
+                  ) : (
+                    <span className="muted">—</span>
+                  )}
+                </td>
+              </tr>
+            ))}
+            {!orders.loading && !orders.items.length ? (
+              <tr>
+                <td colSpan={5} className="muted">
+                  Sin pedidos.
+                </td>
+              </tr>
+            ) : null}
+          </tbody>
+        </table>
+      </div>
+    </Panel>
+  );
+}
+
+function CustomersPanel({ admin }) {
+  const [state, setState] = useState({ loading: false, items: [], error: "" });
+  const [form, setForm] = useState({
+    nombre: "",
+    documento: "",
+    telefono: "",
+    email: "",
+    direccion: "",
+    cupoCredito: 0,
+    saldo: 0
+  });
+
+  async function load() {
+    try {
+      setState((s) => ({ ...s, loading: true, error: "" }));
+      const { data } = await api.get("/api/customers");
+      setState({ loading: false, items: Array.isArray(data?.items) ? data.items : [], error: "" });
+    } catch (err) {
+      const message = err?.response?.data?.message || err?.message || "No se pudo cargar clientes.";
+      setState({ loading: false, items: [], error: message });
+    }
+  }
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  async function create(e) {
+    e.preventDefault();
+    try {
+      await api.post("/api/customers", form);
+      setForm({ nombre: "", documento: "", telefono: "", email: "", direccion: "", cupoCredito: 0, saldo: 0 });
+      await load();
+    } catch (err) {
+      alert(err?.response?.data?.message || err?.message || "No se pudo crear cliente.");
+    }
+  }
+
+  return (
+    <Panel
+      title="Clientes"
+      subtitle={admin ? "Administra clientes (cartera / cupo)." : "Tu cartera de clientes (saldo / cupo)."}
+      right={
+        <button className="btn" type="button" onClick={load} disabled={state.loading}>
+          {state.loading ? "Cargando…" : "Refrescar"}
+        </button>
+      }
+    >
+      <div className="grid2">
+        <div className="card">
+          <div className="cardTitle">Nuevo cliente</div>
+          <form onSubmit={create} className="stack">
+            <input className="input" placeholder="Nombre" value={form.nombre} onChange={(e) => setForm((s) => ({ ...s, nombre: e.target.value }))} />
+            <div className="row">
+              <input className="input" placeholder="Documento" value={form.documento} onChange={(e) => setForm((s) => ({ ...s, documento: e.target.value }))} />
+              <input className="input" placeholder="Teléfono" value={form.telefono} onChange={(e) => setForm((s) => ({ ...s, telefono: e.target.value }))} />
+            </div>
+            <div className="row">
+              <input className="input" placeholder="Email" value={form.email} onChange={(e) => setForm((s) => ({ ...s, email: e.target.value }))} />
+              <input className="input" placeholder="Dirección" value={form.direccion} onChange={(e) => setForm((s) => ({ ...s, direccion: e.target.value }))} />
+            </div>
+            <div className="row">
+              <input className="input" type="number" placeholder="Cupo crédito" value={form.cupoCredito} onChange={(e) => setForm((s) => ({ ...s, cupoCredito: Number(e.target.value) }))} />
+              <input className="input" type="number" placeholder="Saldo" value={form.saldo} onChange={(e) => setForm((s) => ({ ...s, saldo: Number(e.target.value) }))} />
+            </div>
+            <button className="btn primary" type="submit">
+              Crear cliente
+            </button>
+          </form>
+        </div>
+
+        <div className="card">
+          <div className="cardTitle">Listado</div>
+          {state.error ? <p className="bad">ERROR: {state.error}</p> : null}
+          <div className="tableWrap">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Cliente</th>
+                  <th>Saldo</th>
+                  <th>Cupo</th>
+                </tr>
+              </thead>
+              <tbody>
+                {state.items.map((c) => (
+                  <tr key={c._id}>
+                    <td>
+                      {c.nombre}
+                      {c.documento ? <span className="muted"> · {c.documento}</span> : null}
+                    </td>
+                    <td>{formatMoney(c.saldo)}</td>
+                    <td>{formatMoney(c.cupoCredito)}</td>
+                  </tr>
+                ))}
+                {!state.loading && !state.items.length ? (
+                  <tr>
+                    <td colSpan={3} className="muted">
+                      Sin clientes.
+                    </td>
+                  </tr>
+                ) : null}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </Panel>
+  );
+}
+
+function InvoicesPanel({ role }) {
+  const [state, setState] = useState({ loading: false, items: [], error: "" });
+  const [emit, setEmit] = useState({ orderId: "", loading: false, error: "", ok: "" });
+
+  async function load() {
+    try {
+      setState((s) => ({ ...s, loading: true, error: "" }));
+      const { data } = await api.get("/api/invoices");
+      setState({ loading: false, items: Array.isArray(data?.items) ? data.items : [], error: "" });
+    } catch (err) {
+      const message = err?.response?.data?.message || err?.message || "No se pudo cargar facturas.";
+      setState({ loading: false, items: [], error: message });
+    }
+  }
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  async function emitInvoice(e) {
+    e.preventDefault();
+    try {
+      setEmit((s) => ({ ...s, loading: true, error: "", ok: "" }));
+      await api.post(`/api/invoices/${emit.orderId}/emit`);
+      setEmit({ orderId: "", loading: false, error: "", ok: "Factura emitida." });
+      await load();
+    } catch (err) {
+      const message = err?.response?.data?.message || err?.message || "No se pudo emitir.";
+      setEmit((s) => ({ ...s, loading: false, error: message, ok: "" }));
+    }
+  }
+
+  return (
+    <Panel
+      title="Facturas"
+      subtitle={role === "Admin" ? "Emite facturas y consulta listado." : "Consulta tus facturas emitidas."}
+      right={
+        <button className="btn" type="button" onClick={load} disabled={state.loading}>
+          {state.loading ? "Cargando…" : "Refrescar"}
+        </button>
+      }
+    >
+      {role === "Admin" ? (
+        <div className="card" style={{ marginBottom: 14 }}>
+          <div className="cardTitle">Emitir factura</div>
+          <form onSubmit={emitInvoice} className="row">
+            <input className="input" placeholder="orderId (Mongo)" value={emit.orderId} onChange={(e) => setEmit((s) => ({ ...s, orderId: e.target.value }))} />
+            <button className="btn primary" disabled={emit.loading || !emit.orderId} type="submit">
+              {emit.loading ? "Emitiendo…" : "Emitir"}
+            </button>
+          </form>
+          {emit.error ? <p className="bad">ERROR: {emit.error}</p> : null}
+          {emit.ok ? <p className="ok">{emit.ok}</p> : null}
+          <p className="muted">
+            Solo permite pedidos en estado <code>Despachado</code>.
+          </p>
+        </div>
+      ) : null}
+
+      {state.error ? <p className="bad">ERROR: {state.error}</p> : null}
+      <div className="tableWrap">
+        <table className="table">
+          <thead>
+            <tr>
+              <th>Pedido</th>
+              <th>Total</th>
+              {role === "Admin" ? <th>Vendedor</th> : null}
+              <th>CUFE</th>
+              <th>PDF</th>
+            </tr>
+          </thead>
+          <tbody>
+            {state.items.map((inv) => (
+              <tr key={inv._id}>
+                <td>{inv.order?.numeroPedido ?? "—"}</td>
+                <td>{formatMoney(inv.order?.total)}</td>
+                {role === "Admin" ? <td>{inv.vendedor?.nombre || inv.vendedor?.email || "—"}</td> : null}
+                <td>
+                  <code>{String(inv.CUFE || "").slice(0, 10)}…</code>
+                </td>
+                <td>
+                  {inv.URL_PDF ? (
+                    <a className="link" href={inv.URL_PDF} target="_blank" rel="noreferrer">
+                      Abrir
+                    </a>
+                  ) : (
+                    "—"
+                  )}
+                </td>
+              </tr>
+            ))}
+            {!state.loading && !state.items.length ? (
+              <tr>
+                <td colSpan={role === "Admin" ? 5 : 4} className="muted">
+                  Sin facturas.
+                </td>
+              </tr>
+            ) : null}
+          </tbody>
+        </table>
+      </div>
+    </Panel>
+  );
+}
+
+function InventoryPanel() {
+  const [catalog, setCatalog] = useState({ loading: false, items: [], error: "" });
+  const [imageUpload, setImageUpload] = useState({ productId: "", file: null, loading: false, error: "", ok: "" });
+
   async function loadCatalog() {
     try {
       setCatalog((s) => ({ ...s, loading: true, error: "" }));
       const { data } = await api.get("/api/products");
       setCatalog({ loading: false, items: Array.isArray(data?.items) ? data.items : [], error: "" });
     } catch (err) {
-      const message = err?.response?.data?.message || err?.message || "No se pudo cargar el catálogo.";
+      const message = err?.response?.data?.message || err?.message || "No se pudo cargar el inventario.";
       setCatalog({ loading: false, items: [], error: message });
     }
   }
@@ -56,44 +693,6 @@ export default function App() {
   useEffect(() => {
     loadCatalog();
   }, []);
-
-  function persistToken(next) {
-    const value = String(next || "");
-    if (value) localStorage.setItem("token", value);
-    else localStorage.removeItem("token");
-    setToken(value);
-  }
-
-  useEffect(() => {
-    if (!auth?.user) return;
-    setImageUpload((s) => ({ ...s, productId: s.productId || "" }));
-  }, [auth?.user]);
-
-  async function onRegister(e) {
-    e.preventDefault();
-    try {
-      setAuth({ loading: true, error: "", user: null });
-      const { data } = await api.post("/api/auth/register", registerForm);
-      persistToken(data?.token || "");
-      setAuth({ loading: false, error: "", user: data?.user || null });
-    } catch (err) {
-      const message = err?.response?.data?.message || err?.message || "No se pudo registrar.";
-      setAuth({ loading: false, error: message, user: null });
-    }
-  }
-
-  async function onLogin(e) {
-    e.preventDefault();
-    try {
-      setAuth({ loading: true, error: "", user: null });
-      const { data } = await api.post("/api/auth/login", loginForm);
-      persistToken(data?.token || "");
-      setAuth({ loading: false, error: "", user: data?.user || null });
-    } catch (err) {
-      const message = err?.response?.data?.message || err?.message || "No se pudo iniciar sesión.";
-      setAuth({ loading: false, error: message, user: null });
-    }
-  }
 
   async function onUploadProductImage(e) {
     e.preventDefault();
@@ -114,177 +713,20 @@ export default function App() {
   }
 
   return (
-    <div className="page">
-      <header className="card">
-        <h1 className="title">SISTEGO — Local Test UI</h1>
-        <p className="muted">
-          Backend: <code>http://localhost:4000</code> (Vite hace proxy de <code>/api</code> y <code>/health</code>)
-        </p>
-        <p className="muted">
-          Health:{" "}
-          {health.loading ? (
-            "verificando…"
-          ) : health.ok ? (
-            <span className="ok">OK</span>
-          ) : (
-            <span className="bad">ERROR: {health.error || "no responde"}</span>
-          )}
-        </p>
-      </header>
-
-      <section className="grid">
+    <Panel
+      title="Inventario"
+      subtitle="Catálogo de productos, stock y fotos."
+      right={
+        <button className="btn" type="button" onClick={loadCatalog} disabled={catalog.loading}>
+          {catalog.loading ? "Cargando…" : "Refrescar"}
+        </button>
+      }
+    >
+      <div className="grid2" style={{ alignItems: "start" }}>
         <div className="card">
-          <h2 className="subtitle">Token</h2>
-          <p className="muted">
-            Authorization: <code>{authHeaderPreview}</code>
-          </p>
-          <div className="row">
-            <input
-              className="input"
-              placeholder="Pega tu JWT aquí (opcional)"
-              value={token}
-              onChange={(e) => persistToken(e.target.value)}
-            />
-            <button className="btn" type="button" onClick={() => persistToken("")}>
-              Limpiar
-            </button>
-          </div>
-        </div>
-
-        <div className="card">
-          <h2 className="subtitle">Registro</h2>
-          <form onSubmit={onRegister} className="stack">
-            <input
-              className="input"
-              placeholder="email"
-              value={registerForm.email}
-              onChange={(e) => setRegisterForm((s) => ({ ...s, email: e.target.value }))}
-            />
-            <input
-              className="input"
-              placeholder="password"
-              type="password"
-              value={registerForm.password}
-              onChange={(e) => setRegisterForm((s) => ({ ...s, password: e.target.value }))}
-            />
-            <div className="row">
-              <select
-                className="input"
-                value={registerForm.role}
-                onChange={(e) => setRegisterForm((s) => ({ ...s, role: e.target.value }))}
-              >
-                <option value="Admin">Admin</option>
-                <option value="Vendedor">Vendedor</option>
-                <option value="Bodega">Bodega</option>
-              </select>
-              <input
-                className="input"
-                placeholder="nombre (opcional)"
-                value={registerForm.nombre}
-                onChange={(e) => setRegisterForm((s) => ({ ...s, nombre: e.target.value }))}
-              />
-            </div>
-            <button className="btn primary" disabled={auth.loading} type="submit">
-              {auth.loading ? "Registrando…" : "Registrar"}
-            </button>
-          </form>
-        </div>
-
-        <div className="card">
-          <h2 className="subtitle">Login</h2>
-          <form onSubmit={onLogin} className="stack">
-            <input
-              className="input"
-              placeholder="email"
-              value={loginForm.email}
-              onChange={(e) => setLoginForm((s) => ({ ...s, email: e.target.value }))}
-            />
-            <input
-              className="input"
-              placeholder="password"
-              type="password"
-              value={loginForm.password}
-              onChange={(e) => setLoginForm((s) => ({ ...s, password: e.target.value }))}
-            />
-            <button className="btn primary" disabled={auth.loading} type="submit">
-              {auth.loading ? "Entrando…" : "Entrar"}
-            </button>
-          </form>
-          {auth.error ? <p className="bad">ERROR: {auth.error}</p> : null}
-          {auth.user ? (
-            <p className="ok">
-              Sesión: <code>{auth.user.email}</code> (<code>{auth.user.role}</code>)
-            </p>
-          ) : null}
-        </div>
-
-        <div className="card">
-          <h2 className="subtitle">Despacho</h2>
-          <p className="muted">
-            Requiere token con rol <code>Bodega</code> y un <code>orderId</code> existente.
-          </p>
-          <div className="row">
-            <input
-              className="input"
-              placeholder="orderId"
-              value={orderId}
-              onChange={(e) => setOrderId(e.target.value)}
-            />
-          </div>
-          <div style={{ marginTop: 12 }}>
-            <DispatchOrderButton
-              orderId={orderId}
-              disabled={!orderId}
-              onDispatched={(order) => setLastDispatch(order)}
-            />
-          </div>
-          {lastDispatch ? (
-            <pre className="pre">{JSON.stringify(lastDispatch, null, 2)}</pre>
-          ) : null}
-        </div>
-
-        <div className="card">
-          <div className="row" style={{ justifyContent: "space-between" }}>
-            <h2 className="subtitle" style={{ margin: 0 }}>
-              Catálogo
-            </h2>
-            <button className="btn" type="button" onClick={loadCatalog} disabled={catalog.loading}>
-              {catalog.loading ? "Cargando…" : "Refrescar"}
-            </button>
-          </div>
-          {catalog.error ? <p className="bad">ERROR: {catalog.error}</p> : null}
-          {!catalog.loading && !catalog.items.length ? <p className="muted">Sin productos.</p> : null}
-          <div className="catalogGrid" style={{ marginTop: 12 }}>
-            {catalog.items.map((p) => (
-              <div key={p._id} className="productCard">
-                {p.imageUrl ? <img className="productImg" src={p.imageUrl} alt={p.nombre} /> : <div className="productImg placeholder" />}
-                <div className="productMeta">
-                  <div className="productName">{p.nombre}</div>
-                  <div className="muted">
-                    SKU: <code>{p.sku}</code>
-                  </div>
-                  <div className="muted">
-                    Precio: <code>{p.precio}</code> · Stock: <code>{p.stock}</code>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="card">
-          <h2 className="subtitle">Foto de producto (Cloudinary)</h2>
-          <p className="muted">
-            Requiere token con rol <code>Admin</code>. Sube una imagen al producto seleccionado.
-          </p>
-          {!isAdmin ? <p className="muted">Inicia sesión como <code>Admin</code> para habilitar esta sección.</p> : null}
-          <form onSubmit={onUploadProductImage} className="stack" style={{ opacity: isAdmin ? 1 : 0.6 }}>
-            <select
-              className="input"
-              disabled={!isAdmin || imageUpload.loading}
-              value={imageUpload.productId}
-              onChange={(e) => setImageUpload((s) => ({ ...s, productId: e.target.value }))}
-            >
+          <div className="cardTitle">Subir foto</div>
+          <form onSubmit={onUploadProductImage} className="stack">
+            <select className="input" value={imageUpload.productId} onChange={(e) => setImageUpload((s) => ({ ...s, productId: e.target.value }))}>
               <option value="">Selecciona un producto…</option>
               {catalog.items.map((p) => (
                 <option key={p._id} value={p._id}>
@@ -292,21 +734,163 @@ export default function App() {
                 </option>
               ))}
             </select>
-            <input
-              className="input"
-              disabled={!isAdmin || imageUpload.loading}
-              type="file"
-              accept="image/*"
-              onChange={(e) => setImageUpload((s) => ({ ...s, file: e.target.files?.[0] || null }))}
-            />
-            <button className="btn primary" disabled={!isAdmin || imageUpload.loading} type="submit">
+            <input className="input" type="file" accept="image/*" onChange={(e) => setImageUpload((s) => ({ ...s, file: e.target.files?.[0] || null }))} />
+            <button className="btn primary" disabled={imageUpload.loading} type="submit">
               {imageUpload.loading ? "Subiendo…" : "Subir imagen"}
             </button>
           </form>
           {imageUpload.error ? <p className="bad">ERROR: {imageUpload.error}</p> : null}
           {imageUpload.ok ? <p className="ok">{imageUpload.ok}</p> : null}
         </div>
-      </section>
-    </div>
+
+        <div className="card">
+          <div className="cardTitle">Catálogo</div>
+          {catalog.error ? <p className="bad">ERROR: {catalog.error}</p> : null}
+          <div className="catalogGrid" style={{ marginTop: 12 }}>
+            {catalog.items.map((p) => (
+              <div key={p._id} className="productCard">
+                {p.imageUrl ? <img className="productImg" src={p.imageUrl} alt={p.nombre} /> : <div className="productImg placeholder" />}
+                <div className="productMeta">
+                  <div className="productName">{p.nombre}</div>
+                  <div className="muted">
+                    SKU <code>{p.sku}</code> · stock <code>{p.stock}</code>
+                  </div>
+                  <div className="muted">
+                    {formatMoney(p.precio)} · IVA <code>{p.iva}%</code>
+                  </div>
+                </div>
+              </div>
+            ))}
+            {!catalog.loading && !catalog.items.length ? <p className="muted">Sin productos.</p> : null}
+          </div>
+        </div>
+      </div>
+    </Panel>
+  );
+}
+
+function ReportsPanel() {
+  const [summary, setSummary] = useState({ loading: false, data: null, error: "" });
+  const [byVendor, setByVendor] = useState({ loading: false, items: [], error: "" });
+
+  async function load() {
+    try {
+      setSummary({ loading: true, data: null, error: "" });
+      setByVendor({ loading: true, items: [], error: "" });
+      const [a, b] = await Promise.all([api.get("/api/reports/sales/summary"), api.get("/api/reports/sales/by-vendor")]);
+      setSummary({ loading: false, data: a.data, error: "" });
+      setByVendor({ loading: false, items: Array.isArray(b.data?.items) ? b.data.items : [], error: "" });
+    } catch (err) {
+      const message = err?.response?.data?.message || err?.message || "No se pudo cargar reportes.";
+      setSummary({ loading: false, data: null, error: message });
+      setByVendor({ loading: false, items: [], error: message });
+    }
+  }
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  return (
+    <Panel
+      title="Reportes"
+      subtitle="Ventas generales y por vendedor (según facturas emitidas)."
+      right={
+        <button className="btn" type="button" onClick={load} disabled={summary.loading || byVendor.loading}>
+          {summary.loading || byVendor.loading ? "Cargando…" : "Refrescar"}
+        </button>
+      }
+    >
+      {summary.error ? <p className="bad">ERROR: {summary.error}</p> : null}
+      <div className="grid2">
+        <div className="card">
+          <div className="cardTitle">Resumen (últimos 30 días)</div>
+          <div className="kpis">
+            <div className="kpi">
+              <div className="kpiLabel">Facturas</div>
+              <div className="kpiValue">{summary.data?.invoices ?? "—"}</div>
+            </div>
+            <div className="kpi">
+              <div className="kpiLabel">Ventas</div>
+              <div className="kpiValue">{summary.data ? formatMoney(summary.data.totalSales) : "—"}</div>
+            </div>
+          </div>
+        </div>
+
+        <div className="card">
+          <div className="cardTitle">Ventas por vendedor</div>
+          <div className="tableWrap">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Vendedor</th>
+                  <th>Facturas</th>
+                  <th>Ventas</th>
+                </tr>
+              </thead>
+              <tbody>
+                {byVendor.items.map((r) => (
+                  <tr key={r.vendedorId}>
+                    <td>{r.vendedor?.nombre || r.vendedor?.email || r.vendedorId}</td>
+                    <td>{r.invoices}</td>
+                    <td>{formatMoney(r.totalSales)}</td>
+                  </tr>
+                ))}
+                {!byVendor.loading && !byVendor.items.length ? (
+                  <tr>
+                    <td colSpan={3} className="muted">
+                      Sin datos.
+                    </td>
+                  </tr>
+                ) : null}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </Panel>
+  );
+}
+
+function UsersPanel() {
+  const [form, setForm] = useState({ email: "", password: "", role: "Vendedor", nombre: "" });
+  const [state, setState] = useState({ loading: false, error: "", ok: "" });
+
+  async function create(e) {
+    e.preventDefault();
+    try {
+      setState({ loading: true, error: "", ok: "" });
+      await api.post("/api/auth/register", form);
+      setState({ loading: false, error: "", ok: "Usuario creado." });
+      setForm({ email: "", password: "", role: "Vendedor", nombre: "" });
+    } catch (err) {
+      const message = err?.response?.data?.message || err?.message || "No se pudo crear.";
+      setState({ loading: false, error: message, ok: "" });
+    }
+  }
+
+  return (
+    <Panel title="Usuarios" subtitle="Crear usuarios (solo Admin).">
+      <div className="card" style={{ maxWidth: 560 }}>
+        <div className="cardTitle">Nuevo usuario</div>
+        <form onSubmit={create} className="stack">
+          <input className="input" placeholder="Email" value={form.email} onChange={(e) => setForm((s) => ({ ...s, email: e.target.value }))} />
+          <input className="input" placeholder="Contraseña" type="password" value={form.password} onChange={(e) => setForm((s) => ({ ...s, password: e.target.value }))} />
+          <div className="row">
+            <select className="input" value={form.role} onChange={(e) => setForm((s) => ({ ...s, role: e.target.value }))}>
+              <option value="Vendedor">Vendedor</option>
+              <option value="Bodega">Bodega</option>
+              <option value="Admin">Admin</option>
+            </select>
+            <input className="input" placeholder="Nombre (opcional)" value={form.nombre} onChange={(e) => setForm((s) => ({ ...s, nombre: e.target.value }))} />
+          </div>
+          <button className="btn primary" disabled={state.loading} type="submit">
+            {state.loading ? "Creando…" : "Crear usuario"}
+          </button>
+        </form>
+        {state.error ? <p className="bad">ERROR: {state.error}</p> : null}
+        {state.ok ? <p className="ok">{state.ok}</p> : null}
+      </div>
+    </Panel>
   );
 }

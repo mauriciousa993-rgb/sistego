@@ -92,3 +92,36 @@ Configura en el backend (Render o `backend/.env` en local):
 - `CLOUDINARY_API_KEY`
 - `CLOUDINARY_API_SECRET`
 - `CLOUDINARY_FOLDER` (opcional, default: `sistego/products`)
+
+## UI (Login + Dashboard por rol)
+
+La UI ya no expone registro público: la primera pantalla es **Login**.
+
+Roles:
+- `Vendedor`: crear pedidos, ver facturas, ver/crear clientes (cartera simple).
+- `Bodega`: ver pedidos y despachar (descuenta inventario).
+- `Admin`: reportes (ventas generales y por vendedor), inventario + fotos, crear usuarios.
+
+## API agregada
+
+Pedidos:
+- `POST /api/orders` (Vendedor) crear pedido
+- `GET /api/orders` (Auth) listar pedidos (Vendedor ve solo los suyos)
+
+Clientes (cartera):
+- `GET /api/customers` (Vendedor/Admin)
+- `POST /api/customers` (Vendedor/Admin)
+
+Facturas:
+- `GET /api/invoices` (Vendedor/Admin)
+- `POST /api/invoices/:orderId/emit` (Admin)
+
+Reportes:
+- `GET /api/reports/sales/summary` (Admin)
+- `GET /api/reports/sales/by-vendor` (Admin)
+
+## Registro (seguridad)
+
+En producción se recomienda mantener `DISABLE_PUBLIC_REGISTER=true`.
+Si necesitas crear el primer Admin:
+- temporalmente pon `ALLOW_PUBLIC_REGISTER=true` (o `DISABLE_PUBLIC_REGISTER=false`) en el backend, crea el usuario, y vuelve a deshabilitarlo.

@@ -1,8 +1,12 @@
 const express = require("express");
-const { emitElectronicInvoice } = require("../controllers/invoiceController");
+const { emitElectronicInvoice, listInvoices, getInvoice } = require("../controllers/invoiceController");
 const { authenticate, requireRole } = require("../middlewares/auth");
 
 const router = express.Router();
+
+// Listado / detalle
+router.get("/", authenticate, requireRole("Vendedor", "Admin"), listInvoices);
+router.get("/:id", authenticate, requireRole("Vendedor", "Admin"), getInvoice);
 
 // Solo Admin puede emitir FE.
 router.post("/:orderId/emit", authenticate, requireRole("Admin"), emitElectronicInvoice);
