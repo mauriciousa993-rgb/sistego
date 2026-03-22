@@ -9,9 +9,10 @@
   --bad: #ef4444;
   --border: rgba(15, 23, 42, 0.12);
   --shadow: 0 10px 30px rgba(2, 6, 23, 0.06);
-  --primary: #e11d2e;
-  --primarySoft: rgba(225, 29, 46, 0.12);
-  --sideBg: #374151;
+  /* Tema (diferente al rojo tipo SERPI) */
+  --primary: #0ea5e9; /* sky-500 */
+  --primarySoft: rgba(14, 165, 233, 0.12);
+  --sideBg: #0f172a; /* slate-900 */
   --sideText: rgba(255, 255, 255, 0.92);
   --sideMuted: rgba(255, 255, 255, 0.65);
 }
@@ -81,9 +82,9 @@ code {
   width: 36px;
   height: 36px;
   border-radius: 12px;
-  background: radial-gradient(24px 24px at 30% 25%, rgba(37, 99, 235, 0.55), transparent 60%),
-    radial-gradient(26px 26px at 70% 30%, rgba(16, 185, 129, 0.45), transparent 60%), rgba(37, 99, 235, 0.12);
-  border: 1px solid rgba(37, 99, 235, 0.25);
+  background: radial-gradient(24px 24px at 30% 25%, rgba(14, 165, 233, 0.6), transparent 60%),
+    radial-gradient(26px 26px at 70% 30%, rgba(34, 197, 94, 0.45), transparent 60%), rgba(14, 165, 233, 0.12);
+  border: 1px solid rgba(14, 165, 233, 0.28);
 }
 
 .brandTitle {
@@ -288,7 +289,7 @@ code {
 }
 
 .tile:hover {
-  border-color: rgba(225, 29, 46, 0.28);
+  border-color: rgba(14, 165, 233, 0.32);
   box-shadow: 0 14px 40px rgba(2, 6, 23, 0.1);
 }
 
@@ -347,8 +348,8 @@ code {
 }
 
 .input:focus {
-  border-color: rgba(37, 99, 235, 0.55);
-  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.12);
+  border-color: rgba(14, 165, 233, 0.55);
+  box-shadow: 0 0 0 4px rgba(14, 165, 233, 0.14);
 }
 
 .btn {
@@ -368,7 +369,7 @@ code {
 
 .btn.primary {
   background: var(--primary);
-  border-color: rgba(37, 99, 235, 0.55);
+  border-color: rgba(14, 165, 233, 0.55);
   color: white;
 }
 
