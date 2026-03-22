@@ -12,7 +12,10 @@ const productSchema = new mongoose.Schema(
 
     // Imagen del producto (Cloudinary)
     imageUrl: { type: String, default: "" },
-    imagePublicId: { type: String, default: "" }
+    imagePublicId: { type: String, default: "" },
+
+    // Proveedor (opcional, para sugerir compras por bajo inventario)
+    proveedor: { type: String, trim: true, default: "" }
   },
   { timestamps: true }
 );

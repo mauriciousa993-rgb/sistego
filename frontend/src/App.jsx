@@ -678,6 +678,7 @@ function InvoicesPanel({ role }) {
 function InventoryPanel() {
   const [catalog, setCatalog] = useState({ loading: false, items: [], error: "" });
   const [imageUpload, setImageUpload] = useState({ productId: "", file: null, loading: false, error: "", ok: "" });
+  const [low, setLow] = useState({ loading: false, threshold: 5, items: [], error: "" });
 
   async function loadCatalog() {
     try {
@@ -693,6 +694,17 @@ function InventoryPanel() {
   useEffect(() => {
     loadCatalog();
   }, []);
+
+  async function loadLowStock() {
+    try {
+      setLow((s) => ({ ...s, loading: true, error: "" }));
+      const { data } = await api.get(`/api/products/low-stock?threshold=${encodeURIComponent(low.threshold)}`);
+      setLow((s) => ({ ...s, loading: false, items: Array.isArray(data?.items) ? data.items : [], error: "" }));
+    } catch (err) {
+      const message = err?.response?.data?.message || err?.message || "No se pudo cargar bajo inventario.";
+      setLow((s) => ({ ...s, loading: false, items: [], error: message }));
+    }
+  }
 
   async function onUploadProductImage(e) {
     e.preventDefault();
@@ -764,6 +776,55 @@ function InventoryPanel() {
             {!catalog.loading && !catalog.items.length ? <p className="muted">Sin productos.</p> : null}
           </div>
         </div>
+      </div>
+
+      <div className="card" style={{ marginTop: 14 }}>
+        <div className="row" style={{ justifyContent: "space-between" }}>
+          <div className="cardTitle" style={{ margin: 0 }}>
+            Bajo inventario (sugerencia)
+          </div>
+          <div className="row">
+            <input
+              className="input"
+              style={{ maxWidth: 140 }}
+              type="number"
+              min="0"
+              value={low.threshold}
+              onChange={(e) => setLow((s) => ({ ...s, threshold: Number(e.target.value) }))}
+            />
+            <button className="btn" type="button" onClick={loadLowStock} disabled={low.loading}>
+              {low.loading ? "Cargando…" : "Ver"}
+            </button>
+          </div>
+        </div>
+        {low.error ? <p className="bad">ERROR: {low.error}</p> : null}
+        {!low.items.length && !low.loading ? <p className="muted">Sin productos por debajo del umbral.</p> : null}
+        {low.items.length ? (
+          <div className="tableWrap" style={{ marginTop: 10 }}>
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Producto</th>
+                  <th>Proveedor</th>
+                  <th>Stock</th>
+                </tr>
+              </thead>
+              <tbody>
+                {low.items.map((p) => (
+                  <tr key={p._id}>
+                    <td>
+                      {p.nombre} <span className="muted">({p.sku})</span>
+                    </td>
+                    <td>{p.proveedor || "—"}</td>
+                    <td>
+                      <span className="pill warn">{p.stock}</span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : null}
       </div>
     </Panel>
   );

@@ -53,6 +53,8 @@ async function bulkUploadProducts(req, res) {
       { key: "unidadMedida", aliases: ["unidadmedida", "unidad", "unidad_medida", "unit"] }
     ];
 
+    const optional = [{ key: "proveedor", aliases: ["proveedor", "supplier", "vendor"] }];
+
     const productsToInsert = [];
     const seenSkus = new Set();
 
@@ -65,6 +67,10 @@ async function bulkUploadProducts(req, res) {
 
       const extracted = {};
       for (const field of required) {
+        const alias = field.aliases.find((a) => normalizedRow[normalizeHeader(a)] !== undefined);
+        extracted[field.key] = alias ? normalizedRow[normalizeHeader(alias)] : undefined;
+      }
+      for (const field of optional) {
         const alias = field.aliases.find((a) => normalizedRow[normalizeHeader(a)] !== undefined);
         extracted[field.key] = alias ? normalizedRow[normalizeHeader(alias)] : undefined;
       }
@@ -88,7 +94,8 @@ async function bulkUploadProducts(req, res) {
         return res.status(400).json({ message: `Fila ${i + 2}: unidadMedida requerida.` });
       }
 
-      productsToInsert.push({ sku, nombre, precio, stock, iva, unidadMedida });
+      const proveedor = extracted.proveedor ? String(extracted.proveedor).trim() : "";
+      productsToInsert.push({ sku, nombre, precio, stock, iva, unidadMedida, proveedor });
     }
 
     const skus = productsToInsert.map((p) => p.sku);
@@ -115,11 +122,30 @@ async function listProducts(_req, res) {
   try {
     const items = await Product.find({})
       .sort({ createdAt: -1 })
-      .select("sku nombre precio stock iva unidadMedida imageUrl")
+      .select("sku nombre precio stock iva unidadMedida imageUrl proveedor")
       .lean();
     return res.json({ items });
   } catch (err) {
     return res.status(500).json({ message: "No se pudo cargar el catálogo.", error: err.message });
+  }
+}
+
+/**
+ * GET /api/products/low-stock
+ * Admin: devuelve productos con stock <= threshold (default 5).
+ */
+async function lowStock(req, res) {
+  try {
+    const threshold = Number(req.query?.threshold ?? 5);
+    if (!Number.isFinite(threshold) || threshold < 0) return res.status(400).json({ message: "threshold inválido." });
+
+    const items = await Product.find({ stock: { $lte: threshold } })
+      .sort({ stock: 1, nombre: 1 })
+      .select("sku nombre stock proveedor precio iva unidadMedida imageUrl")
+      .lean();
+    return res.json({ threshold, items });
+  } catch (err) {
+    return res.status(500).json({ message: "No se pudo generar sugerencia.", error: err.message });
   }
 }
 
@@ -169,4 +195,4 @@ async function uploadProductImage(req, res) {
   }
 }
 
-module.exports = { bulkUploadProducts, listProducts, uploadProductImage };
+module.exports = { bulkUploadProducts, listProducts, lowStock, uploadProductImage };

@@ -120,6 +120,9 @@ Reportes:
 - `GET /api/reports/sales/summary` (Admin)
 - `GET /api/reports/sales/by-vendor` (Admin)
 
+Inventario:
+- `GET /api/products/low-stock?threshold=5` (Admin) sugerencia de productos con bajo inventario (usa campo opcional `proveedor`).
+
 ## Registro (seguridad)
 
 En producción se recomienda mantener `DISABLE_PUBLIC_REGISTER=true`.
