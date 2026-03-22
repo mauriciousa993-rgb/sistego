@@ -70,6 +70,7 @@ Opción recomendada: **Blueprint** usando `render.yaml` (en la raíz del repo).
 Variables mínimas en Render:
 - `MONGO_URI` (ej: Atlas)
 - `JWT_SECRET` (fuerte, en prod)
+- `OPENAI_API_KEY` (para leer RUT y autocompletar cliente)
 
 El healthcheck queda en `GET /health`.
 
@@ -112,6 +113,7 @@ Pedidos:
 Clientes (cartera):
 - `GET /api/customers` (Vendedor/Admin)
 - `POST /api/customers` (Vendedor/Admin)
+- `POST /api/customers/rut/parse` (Vendedor/Admin) subir RUT (PDF/imagen) y autocompletar datos con OpenAI
 
 Facturas:
 - `GET /api/invoices` (Vendedor/Admin)

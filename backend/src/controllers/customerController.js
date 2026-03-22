@@ -32,7 +32,27 @@ async function createCustomer(req, res) {
     const userId = req.user?.sub;
     if (!role || !userId) return res.status(401).json({ message: "No autenticado." });
 
-    const { nombre, documento, telefono, email, direccion, cupoCredito, saldo, vendedorId } = req.body || {};
+    const {
+      nombre,
+      documento,
+      telefono,
+      email,
+      direccion,
+      cupoCredito,
+      saldo,
+      vendedorId,
+      nit,
+      dv,
+      razonSocial,
+      nombreComercial,
+      ciudad,
+      departamento,
+      pais,
+      regimen,
+      responsabilidades,
+      rutUrl,
+      rutPublicId
+    } = req.body || {};
     if (!nombre) return res.status(400).json({ message: "nombre es requerido." });
 
     let assignedVendedorId = null;
@@ -48,6 +68,17 @@ async function createCustomer(req, res) {
       telefono: telefono ? String(telefono).trim() : undefined,
       email: email ? String(email).trim() : undefined,
       direccion: direccion ? String(direccion).trim() : undefined,
+      nit: nit ? String(nit).trim() : undefined,
+      dv: dv ? String(dv).trim() : undefined,
+      razonSocial: razonSocial ? String(razonSocial).trim() : undefined,
+      nombreComercial: nombreComercial ? String(nombreComercial).trim() : undefined,
+      ciudad: ciudad ? String(ciudad).trim() : undefined,
+      departamento: departamento ? String(departamento).trim() : undefined,
+      pais: pais ? String(pais).trim() : undefined,
+      regimen: regimen ? String(regimen).trim() : undefined,
+      responsabilidades: Array.isArray(responsabilidades) ? responsabilidades.map((x) => String(x)) : undefined,
+      rutUrl: rutUrl ? String(rutUrl) : undefined,
+      rutPublicId: rutPublicId ? String(rutPublicId) : undefined,
       cupoCredito: cupoCredito != null ? Number(cupoCredito) : undefined,
       saldo: saldo != null ? Number(saldo) : undefined
     });

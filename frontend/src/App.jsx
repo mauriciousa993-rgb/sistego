@@ -716,9 +716,21 @@ function CustomersPanel({ admin }) {
     telefono: "",
     email: "",
     direccion: "",
+    nit: "",
+    dv: "",
+    razonSocial: "",
+    nombreComercial: "",
+    ciudad: "",
+    departamento: "",
+    pais: "",
+    regimen: "",
+    responsabilidades: [],
+    rutUrl: "",
+    rutPublicId: "",
     cupoCredito: 0,
     saldo: 0
   });
+  const [rut, setRut] = useState({ file: null, loading: false, error: "", ok: "" });
 
   async function load() {
     try {
@@ -739,10 +751,72 @@ function CustomersPanel({ admin }) {
     e.preventDefault();
     try {
       await api.post("/api/customers", form);
-      setForm({ nombre: "", documento: "", telefono: "", email: "", direccion: "", cupoCredito: 0, saldo: 0 });
+      setForm({
+        nombre: "",
+        documento: "",
+        telefono: "",
+        email: "",
+        direccion: "",
+        nit: "",
+        dv: "",
+        razonSocial: "",
+        nombreComercial: "",
+        ciudad: "",
+        departamento: "",
+        pais: "",
+        regimen: "",
+        responsabilidades: [],
+        rutUrl: "",
+        rutPublicId: "",
+        cupoCredito: 0,
+        saldo: 0
+      });
+      setRut({ file: null, loading: false, error: "", ok: "" });
       await load();
     } catch (err) {
       alert(err?.response?.data?.message || err?.message || "No se pudo crear cliente.");
+    }
+  }
+
+  async function readRut(e) {
+    e.preventDefault();
+    if (!rut.file) return setRut((s) => ({ ...s, error: "Selecciona un RUT (PDF o imagen)." }));
+    try {
+      setRut((s) => ({ ...s, loading: true, error: "", ok: "" }));
+      const fd = new FormData();
+      fd.append("file", rut.file);
+      const { data } = await api.post("/api/customers/rut/parse", fd);
+      const extracted = data?.extracted || {};
+
+      const nit = String(extracted?.nit || "").trim();
+      const dv = String(extracted?.dv || "").trim();
+      const razonSocial = String(extracted?.razonSocial || "").trim();
+
+      setForm((s) => ({
+        ...s,
+        nit,
+        dv,
+        razonSocial,
+        nombreComercial: String(extracted?.nombreComercial || "").trim(),
+        ciudad: String(extracted?.ciudad || "").trim(),
+        departamento: String(extracted?.departamento || "").trim(),
+        pais: String(extracted?.pais || "").trim(),
+        regimen: String(extracted?.regimen || "").trim(),
+        responsabilidades: Array.isArray(extracted?.responsabilidades) ? extracted.responsabilidades : [],
+        rutUrl: String(data?.rutUrl || ""),
+        rutPublicId: String(data?.rutPublicId || ""),
+
+        nombre: razonSocial || s.nombre,
+        documento: nit && dv ? `${nit}-${dv}` : nit || s.documento,
+        email: String(extracted?.email || "").trim() || s.email,
+        telefono: String(extracted?.telefono || "").trim() || s.telefono,
+        direccion: String(extracted?.direccion || "").trim() || s.direccion
+      }));
+
+      setRut((s) => ({ ...s, loading: false, ok: "RUT leído. Revisa y ajusta los campos." }));
+    } catch (err) {
+      const message = err?.response?.data?.message || err?.message || "No se pudo leer el RUT.";
+      setRut((s) => ({ ...s, loading: false, error: message, ok: "" }));
     }
   }
 
@@ -788,13 +862,38 @@ function CustomersPanel({ admin }) {
         <div className="card">
           <div className="cardTitle">Nuevo cliente</div>
           <form onSubmit={create} className="stack">
+            <div className="card" style={{ boxShadow: "none" }}>
+              <div className="cardTitle">RUT (autocompletar con OpenAI)</div>
+              <div className="stack">
+                <input
+                  className="input"
+                  type="file"
+                  accept=".pdf,image/*"
+                  onChange={(e) => setRut((s) => ({ ...s, file: e.target.files?.[0] || null, error: "", ok: "" }))}
+                />
+                <button className="btn primary" type="button" onClick={readRut} disabled={rut.loading || !rut.file}>
+                  {rut.loading ? "Leyendo…" : "Leer RUT y rellenar"}
+                </button>
+                {rut.error ? <p className="bad">ERROR: {rut.error}</p> : null}
+                {rut.ok ? <p className="ok">{rut.ok}</p> : null}
+                {form.rutUrl ? (
+                  <p className="muted">
+                    Archivo:{" "}
+                    <a className="link" href={form.rutUrl} target="_blank" rel="noreferrer">
+                      ver RUT
+                    </a>
+                  </p>
+                ) : null}
+                <p className="muted">Requiere `OPENAI_API_KEY` configurado en el backend.</p>
+              </div>
+            </div>
             <input className="input" placeholder="Nombre" value={form.nombre} onChange={(e) => setForm((s) => ({ ...s, nombre: e.target.value }))} />
             <div className="row">
-              <input className="input" placeholder="Documento" value={form.documento} onChange={(e) => setForm((s) => ({ ...s, documento: e.target.value }))} />
+              <input className="input" placeholder="Documento (NIT-DV)" value={form.documento} onChange={(e) => setForm((s) => ({ ...s, documento: e.target.value }))} />
               <input className="input" placeholder="Teléfono" value={form.telefono} onChange={(e) => setForm((s) => ({ ...s, telefono: e.target.value }))} />
             </div>
             <div className="row">
-              <input className="input" placeholder="Email" value={form.email} onChange={(e) => setForm((s) => ({ ...s, email: e.target.value }))} />
+              <input className="input" placeholder="Email (para FE)" value={form.email} onChange={(e) => setForm((s) => ({ ...s, email: e.target.value }))} />
               <input className="input" placeholder="Dirección" value={form.direccion} onChange={(e) => setForm((s) => ({ ...s, direccion: e.target.value }))} />
             </div>
             <div className="row">

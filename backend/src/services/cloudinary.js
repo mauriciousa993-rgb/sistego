@@ -45,4 +45,36 @@ async function deleteByPublicId(publicId) {
   await cloudinary.uploader.destroy(publicId, { resource_type: "image" });
 }
 
-module.exports = { uploadImageBuffer, deleteByPublicId };
+function uploadRawBuffer({ buffer, publicId, folder, filename, contentType }) {
+  ensureCloudinaryConfigured();
+
+  const targetFolder = folder || process.env.CLOUDINARY_FOLDER_RUT || "sistego/rut";
+
+  return new Promise((resolve, reject) => {
+    const stream = cloudinary.uploader.upload_stream(
+      {
+        resource_type: "raw",
+        folder: targetFolder,
+        public_id: publicId,
+        overwrite: true,
+        filename_override: filename,
+        use_filename: true,
+        unique_filename: false,
+        context: contentType ? { content_type: String(contentType) } : undefined
+      },
+      (err, result) => {
+        if (err) return reject(err);
+        return resolve(result);
+      }
+    );
+    stream.end(buffer);
+  });
+}
+
+async function deleteRawByPublicId(publicId) {
+  if (!publicId) return;
+  ensureCloudinaryConfigured();
+  await cloudinary.uploader.destroy(publicId, { resource_type: "raw" });
+}
+
+module.exports = { uploadImageBuffer, deleteByPublicId, uploadRawBuffer, deleteRawByPublicId };
