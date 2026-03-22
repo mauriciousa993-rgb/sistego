@@ -129,6 +129,8 @@ Inventario:
 - `GET /api/products/catalog.pdf` (Vendedor/Cliente/Admin) descarga de catálogo PDF (con query filters).
 - `POST /api/products` (Admin) crear producto manual.
 - `POST /api/products/bulk` (Admin) carga masiva Excel/CSV.
+- `PATCH /api/products/:id/stock` (Bodega/Admin) ajustar stock manual.
+- `DELETE /api/products/:id` (Bodega/Admin) desactivar (borrado lógico) producto.
 
 Tienda (Cliente):
 - `GET /api/shop/products` (Cliente) productos disponibles (stock > 0)

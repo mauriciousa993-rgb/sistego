@@ -2,6 +2,7 @@ const mongoose = require("mongoose");
 
 const productSchema = new mongoose.Schema(
   {
+    active: { type: Boolean, default: true, index: true },
     sku: { type: String, required: true, unique: true, index: true, trim: true },
     // Código / descripción
     nombre: { type: String, required: true, trim: true }, // nombre corto

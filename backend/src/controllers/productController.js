@@ -23,6 +23,9 @@ function buildProductFilter(query) {
 
   const like = (value) => ({ $regex: String(value).trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), $options: "i" });
 
+  // No listar desactivados por defecto
+  filter.active = { $ne: false };
+
   if (q.codigo) filter.sku = like(q.codigo);
   if (q.descripcion) {
     filter.$or = [{ nombre: like(q.descripcion) }, { descripcion: like(q.descripcion) }];
@@ -262,6 +265,7 @@ async function createProduct(req, res) {
     if (exists) return res.status(409).json({ message: "Ya existe un producto con ese código (sku)." });
 
     const product = await Product.create({
+      active: true,
       sku,
       nombre,
       descripcion: body.descripcion ? String(body.descripcion).trim() : "",
@@ -292,7 +296,7 @@ async function lowStock(req, res) {
     const threshold = Number(req.query?.threshold ?? 5);
     if (!Number.isFinite(threshold) || threshold < 0) return res.status(400).json({ message: "threshold inválido." });
 
-    const items = await Product.find({ stock: { $lte: threshold } })
+    const items = await Product.find({ active: { $ne: false }, stock: { $lte: threshold } })
       .sort({ stock: 1, nombre: 1 })
       .select("sku nombre stock proveedor precio iva unidadMedida imageUrl")
       .lean();
@@ -308,7 +312,7 @@ async function lowStock(req, res) {
  */
 async function exportProductsXlsx(_req, res) {
   try {
-    const items = await Product.find({})
+    const items = await Product.find({ active: { $ne: false } })
       .sort({ nombre: 1 })
       .select("sku nombre proveedor precio stock iva unidadMedida imageUrl")
       .lean();
@@ -448,6 +452,51 @@ async function uploadProductImage(req, res) {
   }
 }
 
+/**
+ * PATCH /api/products/:id/stock
+ * Bodega/Admin: ajusta stock del producto.
+ */
+async function updateStock(req, res) {
+  try {
+    const stock = Number(req.body?.stock);
+    if (!Number.isFinite(stock) || stock < 0) return res.status(400).json({ message: "stock inválido." });
+
+    const product = await Product.findById(req.params.id);
+    if (!product || product.active === false) return res.status(404).json({ message: "Producto no encontrado." });
+
+    const prev = product.stock;
+    product.stock = stock;
+    await product.save();
+    await logAction(req, {
+      action: "product.stock.update",
+      entity: "Product",
+      entityId: product._id,
+      meta: { prev, stock }
+    });
+    return res.json({ product: product.toObject() });
+  } catch (err) {
+    return res.status(500).json({ message: "No se pudo actualizar stock.", error: err.message });
+  }
+}
+
+/**
+ * DELETE /api/products/:id
+ * Bodega/Admin: desactiva (borrado lógico) el producto.
+ */
+async function deactivate(req, res) {
+  try {
+    const product = await Product.findById(req.params.id);
+    if (!product || product.active === false) return res.status(404).json({ message: "Producto no encontrado." });
+
+    product.active = false;
+    await product.save();
+    await logAction(req, { action: "product.deactivate", entity: "Product", entityId: product._id });
+    return res.json({ ok: true });
+  } catch (err) {
+    return res.status(500).json({ message: "No se pudo desactivar producto.", error: err.message });
+  }
+}
+
 module.exports = {
   bulkUploadProducts,
   listProducts,
@@ -456,5 +505,7 @@ module.exports = {
   lowStock,
   exportProductsXlsx,
   catalogPdf,
+  updateStock,
+  deactivate,
   uploadProductImage
 };

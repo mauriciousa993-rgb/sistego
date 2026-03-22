@@ -28,7 +28,7 @@ function computeTotal(items, productsById) {
 // Catálogo para cliente final: solo disponibles (stock > 0)
 async function listShopProducts(_req, res) {
   try {
-    const items = await Product.find({ stock: { $gt: 0 } })
+    const items = await Product.find({ active: { $ne: false }, stock: { $gt: 0 } })
       .sort({ nombre: 1 })
       .select("sku nombre precio stock iva unidadMedida imageUrl proveedor")
       .lean();

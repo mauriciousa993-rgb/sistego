@@ -8,6 +8,8 @@ const {
   lowStock,
   exportProductsXlsx,
   catalogPdf,
+  updateStock,
+  deactivate,
   uploadProductImage
 } = require("../controllers/productController");
 const { authenticate, requireRole } = require("../middlewares/auth");
@@ -39,6 +41,10 @@ router.post("/", authenticate, requireRole("Admin"), createProduct);
 
 // Solo Admin puede cargar inventario masivamente.
 router.post("/bulk", authenticate, requireRole("Admin"), upload.single("file"), bulkUploadProducts);
+
+// Ajuste inventario (Bodega/Admin)
+router.patch("/:id/stock", authenticate, requireRole("Bodega", "Admin"), updateStock);
+router.delete("/:id", authenticate, requireRole("Bodega", "Admin"), deactivate);
 
 // Imagen del producto (Cloudinary)
 router.post("/:id/image", authenticate, requireRole("Admin"), uploadImage.single("image"), uploadProductImage);

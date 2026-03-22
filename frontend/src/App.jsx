@@ -59,7 +59,7 @@ export default function App() {
     if (!role) return [];
     if (role === "Cliente") return ["home", "search", "catalog", "shop", "cart", "orders", "invoices"];
     if (role === "Vendedor") return ["home", "search", "catalog", "orders", "customers", "invoices"];
-    if (role === "Bodega") return ["home", "orders"];
+    if (role === "Bodega") return ["home", "orders", "inventory"];
     return ["home", "reports", "inventory", "purchases", "audit", "invoices", "users"];
   }, [role]);
 
@@ -230,6 +230,7 @@ export default function App() {
         {active === "customers" && isAdmin ? <CustomersPanel admin /> : null}
         {active === "invoices" ? <InvoicesPanel role={role} /> : null}
         {active === "inventory" && isAdmin ? <InventoryPanel /> : null}
+        {active === "inventory" && isBodega ? <BodegaInventoryPanel /> : null}
         {active === "purchases" && isAdmin ? <PurchasesPanel /> : null}
         {active === "audit" && isAdmin ? <AuditPanel /> : null}
         {active === "reports" && isAdmin ? <ReportsPanel /> : null}
@@ -1273,6 +1274,148 @@ function InventoryPanel() {
         ) : null}
       </div>
     </Panel>
+  );
+}
+
+function BodegaInventoryPanel() {
+  const [state, setState] = useState({ loading: false, items: [], error: "" });
+  const [q, setQ] = useState({ codigo: "", descripcion: "" });
+  const [saving, setSaving] = useState({ id: "", error: "" });
+
+  async function load() {
+    try {
+      setState((s) => ({ ...s, loading: true, error: "" }));
+      const { data } = await api.get("/api/products", { params: q });
+      setState({ loading: false, items: Array.isArray(data?.items) ? data.items : [], error: "" });
+    } catch (err) {
+      const message = err?.response?.data?.message || err?.message || "No se pudo cargar inventario.";
+      setState({ loading: false, items: [], error: message });
+    }
+  }
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  async function setStock(id, stock) {
+    try {
+      setSaving({ id, error: "" });
+      await api.patch(`/api/products/${id}/stock`, { stock: Number(stock) });
+      await load();
+      setSaving({ id: "", error: "" });
+    } catch (err) {
+      const message = err?.response?.data?.message || err?.message || "No se pudo actualizar stock.";
+      setSaving({ id, error: message });
+    }
+  }
+
+  async function deactivate(id) {
+    const ok = confirm("¿Desactivar este producto? (no se eliminará de la BD, solo quedará oculto)");
+    if (!ok) return;
+    try {
+      setSaving({ id, error: "" });
+      await api.delete(`/api/products/${id}`);
+      await load();
+      setSaving({ id: "", error: "" });
+    } catch (err) {
+      const message = err?.response?.data?.message || err?.message || "No se pudo desactivar.";
+      setSaving({ id, error: message });
+    }
+  }
+
+  return (
+    <Panel
+      title="Inventario (Bodega)"
+      subtitle="Ajusta cantidades y desactiva productos cargados por error."
+      right={
+        <button className="btn" type="button" onClick={load} disabled={state.loading}>
+          {state.loading ? "Cargando…" : "Refrescar"}
+        </button>
+      }
+    >
+      <div className="card">
+        <div className="grid2">
+          <input className="input" placeholder="Código" value={q.codigo} onChange={(e) => setQ((s) => ({ ...s, codigo: e.target.value }))} />
+          <input
+            className="input"
+            placeholder="Descripción"
+            value={q.descripcion}
+            onChange={(e) => setQ((s) => ({ ...s, descripcion: e.target.value }))}
+          />
+        </div>
+        <div className="row" style={{ marginTop: 12 }}>
+          <button className="btn primary" type="button" onClick={load} disabled={state.loading}>
+            Buscar
+          </button>
+          <button className="btn" type="button" onClick={() => setQ({ codigo: "", descripcion: "" })}>
+            Limpiar
+          </button>
+        </div>
+      </div>
+
+      {state.error ? <p className="bad">ERROR: {state.error}</p> : null}
+      {saving.error ? <p className="bad">ERROR: {saving.error}</p> : null}
+      <div className="tableWrap" style={{ marginTop: 14 }}>
+        <table className="table">
+          <thead>
+            <tr>
+              <th>Código</th>
+              <th>Descripción</th>
+              <th>Stock</th>
+              <th style={{ width: 210 }}>Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            {state.items.map((p) => (
+              <BodegaProductRow
+                key={p._id}
+                product={p}
+                busy={saving.id === p._id}
+                onSetStock={(stock) => setStock(p._id, stock)}
+                onDeactivate={() => deactivate(p._id)}
+              />
+            ))}
+            {!state.loading && !state.items.length ? (
+              <tr>
+                <td colSpan={4} className="muted">
+                  Sin productos.
+                </td>
+              </tr>
+            ) : null}
+          </tbody>
+        </table>
+      </div>
+    </Panel>
+  );
+}
+
+function BodegaProductRow({ product, busy, onSetStock, onDeactivate }) {
+  const [stock, setStockValue] = useState(Number(product.stock || 0));
+
+  useEffect(() => {
+    setStockValue(Number(product.stock || 0));
+  }, [product.stock]);
+
+  return (
+    <tr>
+      <td>
+        <code>{product.sku}</code>
+      </td>
+      <td>{product.descripcion || product.nombre}</td>
+      <td style={{ width: 180 }}>
+        <input className="input" type="number" min="0" value={stock} onChange={(e) => setStockValue(Number(e.target.value))} />
+      </td>
+      <td>
+        <div className="row">
+          <button className="btn primary" type="button" disabled={busy} onClick={() => onSetStock(stock)}>
+            Guardar
+          </button>
+          <button className="btn" type="button" disabled={busy} onClick={onDeactivate}>
+            Desactivar
+          </button>
+        </div>
+      </td>
+    </tr>
   );
 }
 
