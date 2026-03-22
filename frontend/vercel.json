@@ -1,0 +1,7 @@
+{
+  "rewrites": [
+    { "source": "/health", "destination": "https://sistego.onrender.com/health" },
+    { "source": "/api/:path*", "destination": "https://sistego.onrender.com/api/:path*" }
+  ]
+}
+
