@@ -1039,8 +1039,8 @@ function InventoryPanel() {
     referencia: "",
     codigoBarras: "",
     proveedor: "",
-    precio: 0,
-    stock: 0,
+    precio: "",
+    stock: "",
     iva: 19,
     unidadMedida: "UND",
     loading: false,
@@ -1106,8 +1106,8 @@ function InventoryPanel() {
         referencia: create.referencia,
         codigoBarras: create.codigoBarras,
         proveedor: create.proveedor,
-        precio: Number(create.precio),
-        stock: Number(create.stock),
+        precio: Number(create.precio || 0),
+        stock: Number(create.stock || 0),
         iva: Number(create.iva),
         unidadMedida: create.unidadMedida
       };
@@ -1188,10 +1188,46 @@ function InventoryPanel() {
               <input className="input" placeholder="Unidad medida" value={create.unidadMedida} onChange={(e) => setCreate((s) => ({ ...s, unidadMedida: e.target.value }))} />
             </div>
             <div className="grid2">
-              <input className="input" type="number" placeholder="Precio" value={create.precio} onChange={(e) => setCreate((s) => ({ ...s, precio: Number(e.target.value) }))} />
-              <input className="input" type="number" placeholder="Stock" value={create.stock} onChange={(e) => setCreate((s) => ({ ...s, stock: Number(e.target.value) }))} />
+              <div>
+                <div className="muted">Precio (COP)</div>
+                <input
+                  className="input"
+                  type="number"
+                  inputMode="decimal"
+                  min="0"
+                  step="0.01"
+                  placeholder="Ej: 25000"
+                  value={create.precio}
+                  onChange={(e) => setCreate((s) => ({ ...s, precio: e.target.value }))}
+                />
+              </div>
+              <div>
+                <div className="muted">Stock inicial</div>
+                <input
+                  className="input"
+                  type="number"
+                  inputMode="numeric"
+                  min="0"
+                  step="1"
+                  placeholder="Ej: 10"
+                  value={create.stock}
+                  onChange={(e) => setCreate((s) => ({ ...s, stock: e.target.value }))}
+                />
+              </div>
             </div>
-            <input className="input" type="number" placeholder="IVA (%)" value={create.iva} onChange={(e) => setCreate((s) => ({ ...s, iva: Number(e.target.value) }))} />
+            <div>
+              <div className="muted">IVA (%)</div>
+              <input
+                className="input"
+                type="number"
+                inputMode="numeric"
+                min="0"
+                step="1"
+                placeholder="Ej: 19"
+                value={create.iva}
+                onChange={(e) => setCreate((s) => ({ ...s, iva: Number(e.target.value) }))}
+              />
+            </div>
             <button className="btn primary" disabled={create.loading} type="submit">
               {create.loading ? "Guardando…" : "Crear"}
             </button>
